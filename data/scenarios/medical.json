@@ -1,0 +1,12 @@
+{
+  "version": "1.0", "id": "medical-emergency", "name": "응급 환자 발생", "kind": "medical", "seed": 126,
+  "params": { "spreadRate": 0.1, "maxRadius": 10, "responderFixDuration": 30 },
+  "steps": [
+    { "trigger": { "type": "time", "delay": 3 }, "actions": [{ "type": "setPhase", "phase": "detected" }] },
+    { "trigger": { "type": "phase", "phase": "detected" }, "actions": [{ "type": "setPhase", "phase": "alarm" }, { "type": "hudMessage", "text": "응급 환자 발생 — 구조 인력을 호출합니다", "severity": "warning" }] },
+    { "trigger": { "type": "phase", "phase": "alarm" }, "actions": [{ "type": "overrideBehavior", "selector": "type:agv", "behavior": "yield" }, { "type": "dispatchResponder", "count": 2, "to": "hazard-source" }, { "type": "dispatchVehicle", "vehicleType": "igv", "mission": "medical-transport" }] },
+    { "trigger": { "type": "time", "delay": 6 }, "actions": [{ "type": "setPhase", "phase": "response" }] },
+    { "trigger": { "type": "time", "delay": 90 }, "actions": [{ "type": "setPhase", "phase": "allClear" }, { "type": "hudMessage", "text": "의료 대응 제한 시간 도달 — 현장 지휘 확인 필요", "severity": "warning" }] }
+  ],
+  "cameraCues": [{ "on": { "phase": "detected" }, "shot": "follow", "target": "responder", "duration": 6 }]
+}

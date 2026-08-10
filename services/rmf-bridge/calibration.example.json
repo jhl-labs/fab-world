@@ -1,0 +1,26 @@
+{
+  "rmfMap": "L1",
+  "fabMap": "fab-L1",
+  "points": [
+    {
+      "name": "west-corridor-marker",
+      "rmf": [0, 0],
+      "fab": [100, -50]
+    },
+    {
+      "name": "east-corridor-marker",
+      "rmf": [10, 0],
+      "fab": [100, -40]
+    },
+    {
+      "name": "north-equipment-corner",
+      "rmf": [0, 10],
+      "fab": [90, -50]
+    },
+    {
+      "name": "central-safety-panel",
+      "rmf": [20, 15],
+      "fab": [85, -30]
+    }
+  ]
+}

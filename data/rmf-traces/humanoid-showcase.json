@@ -1,0 +1,1907 @@
+{
+  "version": "1.0",
+  "name": "FabWorld purpose showcase reference",
+  "source": "reference",
+  "recordedAt": "2026-07-30T00:00:00.000Z",
+  "fleet": "fab_humanoid_fleet",
+  "map": "fab-L1",
+  "tasks": [
+    {
+      "category": "inspection_round",
+      "sourceTaskId": "reference-inspection",
+      "events": [
+        {
+          "atMs": 0,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-inspection",
+            "category": "inspection_round",
+            "status": "assigned",
+            "assignedRobot": "humanoid-001",
+            "timestamp": 0
+          }
+        },
+        {
+          "atMs": 0,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -97.5,
+            "yaw": 0,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 0
+          }
+        },
+        {
+          "atMs": 250,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-inspection",
+            "category": "inspection_round",
+            "status": "navigating",
+            "assignedRobot": "humanoid-001",
+            "timestamp": 250
+          }
+        },
+        {
+          "atMs": 1000,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -85.137,
+            "y": -97.5,
+            "yaw": 0,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 1000
+          }
+        },
+        {
+          "atMs": 1750,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -84.275,
+            "y": -97.5,
+            "yaw": 0,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 1750
+          }
+        },
+        {
+          "atMs": 2500,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -83.412,
+            "y": -97.5,
+            "yaw": 0,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 2500
+          }
+        },
+        {
+          "atMs": 3250,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.55,
+            "y": -97.5,
+            "yaw": 0,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 3250
+          }
+        },
+        {
+          "atMs": 4000,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.687,
+            "y": -97.5,
+            "yaw": 0,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 4000
+          }
+        },
+        {
+          "atMs": 4598,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81,
+            "y": -97.5,
+            "yaw": 0,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 4598
+          }
+        },
+        {
+          "atMs": 5348,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.145,
+            "y": -96.65,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 5348
+          }
+        },
+        {
+          "atMs": 6098,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.289,
+            "y": -95.799,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 6098
+          }
+        },
+        {
+          "atMs": 6848,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.434,
+            "y": -94.949,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 6848
+          }
+        },
+        {
+          "atMs": 7598,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.578,
+            "y": -94.099,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 7598
+          }
+        },
+        {
+          "atMs": 8348,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.723,
+            "y": -93.248,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 8348
+          }
+        },
+        {
+          "atMs": 9098,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.867,
+            "y": -92.398,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 9098
+          }
+        },
+        {
+          "atMs": 9848,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.012,
+            "y": -91.548,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 9848
+          }
+        },
+        {
+          "atMs": 10598,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.156,
+            "y": -90.698,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 10598
+          }
+        },
+        {
+          "atMs": 11348,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.301,
+            "y": -89.847,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 11348
+          }
+        },
+        {
+          "atMs": 12098,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.446,
+            "y": -88.997,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 12098
+          }
+        },
+        {
+          "atMs": 12848,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.59,
+            "y": -88.147,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 12848
+          }
+        },
+        {
+          "atMs": 13418,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -87.5,
+            "yaw": 1.739,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 13418
+          }
+        },
+        {
+          "atMs": 14168,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -86.637,
+            "yaw": 1.571,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 14168
+          }
+        },
+        {
+          "atMs": 14918,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.775,
+            "yaw": 1.571,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 14918
+          }
+        },
+        {
+          "atMs": 15505,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": 1.571,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 15505
+          }
+        },
+        {
+          "atMs": 15605,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 15605
+          }
+        },
+        {
+          "atMs": 15855,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-inspection",
+            "category": "inspection_round",
+            "status": "observing",
+            "assignedRobot": "humanoid-001",
+            "timestamp": 15855
+          }
+        },
+        {
+          "atMs": 16355,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 16355
+          }
+        },
+        {
+          "atMs": 17105,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 17105
+          }
+        },
+        {
+          "atMs": 17855,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 17855
+          }
+        },
+        {
+          "atMs": 18605,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-inspection",
+            "category": "inspection_round",
+            "status": "interacting",
+            "assignedRobot": "humanoid-001",
+            "timestamp": 18605
+          }
+        },
+        {
+          "atMs": 18605,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 18605
+          }
+        },
+        {
+          "atMs": 19355,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 19355
+          }
+        },
+        {
+          "atMs": 20105,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 20105
+          }
+        },
+        {
+          "atMs": 20855,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 20855
+          }
+        },
+        {
+          "atMs": 21605,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 21605
+          }
+        },
+        {
+          "atMs": 22355,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 22355
+          }
+        },
+        {
+          "atMs": 22605,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-inspection",
+            "category": "inspection_round",
+            "status": "reporting",
+            "assignedRobot": "humanoid-001",
+            "interactionKind": "inspection_anomaly_reported",
+            "timestamp": 22605
+          }
+        },
+        {
+          "atMs": 22605,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 22605
+          }
+        },
+        {
+          "atMs": 23355,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 23355
+          }
+        },
+        {
+          "atMs": 24105,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 24105
+          }
+        },
+        {
+          "atMs": 24855,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.1,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 24855
+          }
+        },
+        {
+          "atMs": 25105,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-inspection",
+            "category": "inspection_round",
+            "status": "returning",
+            "assignedRobot": "humanoid-001",
+            "timestamp": 25105
+          }
+        },
+        {
+          "atMs": 25855,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -85.962,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 25855
+          }
+        },
+        {
+          "atMs": 26605,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -86.825,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 26605
+          }
+        },
+        {
+          "atMs": 27192,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.7,
+            "y": -87.5,
+            "yaw": -1.571,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 27192
+          }
+        },
+        {
+          "atMs": 27942,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.555,
+            "y": -88.35,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 27942
+          }
+        },
+        {
+          "atMs": 28692,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.411,
+            "y": -89.201,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 28692
+          }
+        },
+        {
+          "atMs": 29442,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.266,
+            "y": -90.051,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 29442
+          }
+        },
+        {
+          "atMs": 30192,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.122,
+            "y": -90.901,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 30192
+          }
+        },
+        {
+          "atMs": 30942,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.977,
+            "y": -91.752,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 30942
+          }
+        },
+        {
+          "atMs": 31692,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.833,
+            "y": -92.602,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 31692
+          }
+        },
+        {
+          "atMs": 32442,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.688,
+            "y": -93.452,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 32442
+          }
+        },
+        {
+          "atMs": 33192,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.544,
+            "y": -94.302,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 33192
+          }
+        },
+        {
+          "atMs": 33942,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.399,
+            "y": -95.153,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 33942
+          }
+        },
+        {
+          "atMs": 34692,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.254,
+            "y": -96.003,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 34692
+          }
+        },
+        {
+          "atMs": 35442,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.11,
+            "y": -96.853,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 35442
+          }
+        },
+        {
+          "atMs": 36012,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81,
+            "y": -97.5,
+            "yaw": -1.402,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 36012
+          }
+        },
+        {
+          "atMs": 36762,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -81.862,
+            "y": -97.5,
+            "yaw": 3.142,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 36762
+          }
+        },
+        {
+          "atMs": 37512,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -82.725,
+            "y": -97.5,
+            "yaw": 3.142,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 37512
+          }
+        },
+        {
+          "atMs": 38262,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -83.587,
+            "y": -97.5,
+            "yaw": 3.142,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 38262
+          }
+        },
+        {
+          "atMs": 39012,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -84.45,
+            "y": -97.5,
+            "yaw": 3.142,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 39012
+          }
+        },
+        {
+          "atMs": 39762,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -85.312,
+            "y": -97.5,
+            "yaw": 3.142,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 39762
+          }
+        },
+        {
+          "atMs": 40360,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -97.5,
+            "yaw": 3.142,
+            "battery": 94,
+            "mode": "moving",
+            "taskId": "reference-inspection",
+            "timestamp": 40360
+          }
+        },
+        {
+          "atMs": 40360,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -97.5,
+            "yaw": 3.142,
+            "battery": 94,
+            "mode": "waiting",
+            "taskId": "reference-inspection",
+            "timestamp": 40360
+          }
+        },
+        {
+          "atMs": 40610,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-inspection",
+            "category": "inspection_round",
+            "status": "completed",
+            "assignedRobot": "humanoid-001",
+            "timestamp": 40610
+          }
+        },
+        {
+          "atMs": 40610,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-001",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -97.5,
+            "yaw": 3.142,
+            "battery": 94,
+            "mode": "waiting",
+            "timestamp": 40610
+          }
+        }
+      ]
+    },
+    {
+      "category": "gas_isolation",
+      "sourceTaskId": "reference-gas-isolation",
+      "events": [
+        {
+          "atMs": 0,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "status": "assigned",
+            "assignedRobot": "humanoid-002",
+            "timestamp": 0
+          }
+        },
+        {
+          "atMs": 0,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -70.5,
+            "yaw": 1.571,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 0
+          }
+        },
+        {
+          "atMs": 250,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "status": "navigating",
+            "assignedRobot": "humanoid-002",
+            "timestamp": 250
+          }
+        },
+        {
+          "atMs": 1000,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -69.637,
+            "yaw": 1.571,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 1000
+          }
+        },
+        {
+          "atMs": 1554,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -69,
+            "yaw": 1.571,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 1554
+          }
+        },
+        {
+          "atMs": 2304,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -85.137,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 2304
+          }
+        },
+        {
+          "atMs": 3054,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -84.275,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 3054
+          }
+        },
+        {
+          "atMs": 3804,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -83.412,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 3804
+          }
+        },
+        {
+          "atMs": 4554,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -82.55,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 4554
+          }
+        },
+        {
+          "atMs": 5250,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 5250
+          }
+        },
+        {
+          "atMs": 5350,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 5350
+          }
+        },
+        {
+          "atMs": 5600,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "status": "observing",
+            "assignedRobot": "humanoid-002",
+            "timestamp": 5600
+          }
+        },
+        {
+          "atMs": 6100,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 6100
+          }
+        },
+        {
+          "atMs": 6850,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 6850
+          }
+        },
+        {
+          "atMs": 7600,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 7600
+          }
+        },
+        {
+          "atMs": 8150,
+          "event": {
+            "type": "work_permit",
+            "taskId": "reference-gas-isolation",
+            "authorized": true,
+            "authorizedBy": "reference-ehs-controller",
+            "clearance": 2.25,
+            "timestamp": 8150
+          }
+        },
+        {
+          "atMs": 8350,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "status": "interacting",
+            "assignedRobot": "humanoid-002",
+            "timestamp": 8350
+          }
+        },
+        {
+          "atMs": 8350,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 8350
+          }
+        },
+        {
+          "atMs": 8450,
+          "event": {
+            "type": "action_telemetry",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "robot": "humanoid-002",
+            "phase": "approach",
+            "progress": 0,
+            "leftHandContact": false,
+            "rightHandContact": false,
+            "valvePosition": 0,
+            "sensorStable": false,
+            "handPose": {
+              "frame": "base_link",
+              "leftPositionM": [
+                0.05,
+                0.92,
+                -0.34
+              ],
+              "rightPositionM": [
+                0.05,
+                0.92,
+                0.34
+              ]
+            },
+            "timestamp": 8450
+          }
+        },
+        {
+          "atMs": 9100,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 9100
+          }
+        },
+        {
+          "atMs": 9550,
+          "event": {
+            "type": "action_telemetry",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "robot": "humanoid-002",
+            "phase": "contact",
+            "progress": 0.2,
+            "leftHandContact": true,
+            "rightHandContact": true,
+            "valvePosition": 0,
+            "sensorStable": false,
+            "handPose": {
+              "frame": "base_link",
+              "leftPositionM": [
+                0.4195,
+                1.1831410092619288,
+                -0.17513843568079226
+              ],
+              "rightPositionM": [
+                0.4195,
+                1.1831410092619288,
+                0.1751384356807923
+              ]
+            },
+            "timestamp": 9550
+          }
+        },
+        {
+          "atMs": 9850,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 9850
+          }
+        },
+        {
+          "atMs": 10600,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 10600
+          }
+        },
+        {
+          "atMs": 10650,
+          "event": {
+            "type": "action_telemetry",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "robot": "humanoid-002",
+            "phase": "turning",
+            "progress": 0.4,
+            "leftHandContact": true,
+            "rightHandContact": true,
+            "valvePosition": 0.2,
+            "sensorStable": false,
+            "handPose": {
+              "frame": "base_link",
+              "leftPositionM": [
+                0.4195,
+                1.1549279421285348,
+                -0.1933652682377858
+              ],
+              "rightPositionM": [
+                0.4195,
+                1.2082505853765382,
+                0.15282916026721804
+              ]
+            },
+            "timestamp": 10650
+          }
+        },
+        {
+          "atMs": 11350,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 11350
+          }
+        },
+        {
+          "atMs": 11550,
+          "event": {
+            "type": "action_telemetry",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "robot": "humanoid-002",
+            "phase": "turning",
+            "progress": 0.65,
+            "leftHandContact": true,
+            "rightHandContact": true,
+            "valvePosition": 0.55,
+            "sensorStable": false,
+            "handPose": {
+              "frame": "base_link",
+              "leftPositionM": [
+                0.4195,
+                1.1549279421285348,
+                -0.1933652682377858
+              ],
+              "rightPositionM": [
+                0.4195,
+                1.2082505853765382,
+                0.15282916026721802
+              ]
+            },
+            "timestamp": 11550
+          }
+        },
+        {
+          "atMs": 12100,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 12100
+          }
+        },
+        {
+          "atMs": 12650,
+          "event": {
+            "type": "action_telemetry",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "robot": "humanoid-002",
+            "phase": "turning",
+            "progress": 0.82,
+            "leftHandContact": true,
+            "rightHandContact": true,
+            "valvePosition": 0.82,
+            "sensorStable": false,
+            "handPose": {
+              "frame": "base_link",
+              "leftPositionM": [
+                0.4195,
+                1.2153300946464975,
+                -0.1451411719815578
+              ],
+              "rightPositionM": [
+                0.4195,
+                1.1456263576495442,
+                0.19813025948269852
+              ]
+            },
+            "timestamp": 12650
+          }
+        },
+        {
+          "atMs": 12850,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 12850
+          }
+        },
+        {
+          "atMs": 13550,
+          "event": {
+            "type": "action_telemetry",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "robot": "humanoid-002",
+            "phase": "monitoring",
+            "progress": 0.9,
+            "leftHandContact": false,
+            "rightHandContact": false,
+            "valvePosition": 1,
+            "gasPpm": 2.4,
+            "sensorStable": false,
+            "handPose": {
+              "frame": "base_link",
+              "leftPositionM": [
+                0.05,
+                0.92,
+                -0.34
+              ],
+              "rightPositionM": [
+                0.05,
+                0.92,
+                0.34
+              ]
+            },
+            "timestamp": 13550
+          }
+        },
+        {
+          "atMs": 13600,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 13600
+          }
+        },
+        {
+          "atMs": 14350,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 14350
+          }
+        },
+        {
+          "atMs": 14450,
+          "event": {
+            "type": "action_telemetry",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "robot": "humanoid-002",
+            "phase": "verified",
+            "progress": 1,
+            "leftHandContact": false,
+            "rightHandContact": false,
+            "valvePosition": 1,
+            "gasPpm": 0.8,
+            "sensorStable": true,
+            "handPose": {
+              "frame": "base_link",
+              "leftPositionM": [
+                0.05,
+                0.92,
+                -0.34
+              ],
+              "rightPositionM": [
+                0.05,
+                0.92,
+                0.34
+              ]
+            },
+            "timestamp": 14450
+          }
+        },
+        {
+          "atMs": 14550,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "status": "interacting",
+            "assignedRobot": "humanoid-002",
+            "interactionKind": "gas_isolation_verified",
+            "timestamp": 14550
+          }
+        },
+        {
+          "atMs": 15100,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 15100
+          }
+        },
+        {
+          "atMs": 15350,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "status": "reporting",
+            "assignedRobot": "humanoid-002",
+            "timestamp": 15350
+          }
+        },
+        {
+          "atMs": 15350,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 15350
+          }
+        },
+        {
+          "atMs": 16100,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 16100
+          }
+        },
+        {
+          "atMs": 16850,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 16850
+          }
+        },
+        {
+          "atMs": 17600,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -81.75,
+            "y": -69,
+            "yaw": 0,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 17600
+          }
+        },
+        {
+          "atMs": 17850,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "status": "returning",
+            "assignedRobot": "humanoid-002",
+            "timestamp": 17850
+          }
+        },
+        {
+          "atMs": 18600,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -82.612,
+            "y": -69,
+            "yaw": 3.142,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 18600
+          }
+        },
+        {
+          "atMs": 19350,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -83.475,
+            "y": -69,
+            "yaw": 3.142,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 19350
+          }
+        },
+        {
+          "atMs": 20100,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -84.337,
+            "y": -69,
+            "yaw": 3.142,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 20100
+          }
+        },
+        {
+          "atMs": 20850,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -85.2,
+            "y": -69,
+            "yaw": 3.142,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 20850
+          }
+        },
+        {
+          "atMs": 21546,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -69,
+            "yaw": 3.142,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 21546
+          }
+        },
+        {
+          "atMs": 22296,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -69.862,
+            "yaw": -1.571,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 22296
+          }
+        },
+        {
+          "atMs": 22850,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -70.5,
+            "yaw": -1.571,
+            "battery": 91,
+            "mode": "moving",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 22850
+          }
+        },
+        {
+          "atMs": 22850,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -70.5,
+            "yaw": -1.571,
+            "battery": 91,
+            "mode": "waiting",
+            "taskId": "reference-gas-isolation",
+            "timestamp": 22850
+          }
+        },
+        {
+          "atMs": 23100,
+          "event": {
+            "type": "task_state",
+            "taskId": "reference-gas-isolation",
+            "category": "gas_isolation",
+            "status": "completed",
+            "assignedRobot": "humanoid-002",
+            "timestamp": 23100
+          }
+        },
+        {
+          "atMs": 23100,
+          "event": {
+            "type": "robot_state",
+            "fleet": "fab_humanoid_fleet",
+            "robot": "humanoid-002",
+            "map": "fab-L1",
+            "x": -86,
+            "y": -70.5,
+            "yaw": -1.571,
+            "battery": 91,
+            "mode": "waiting",
+            "timestamp": 23100
+          }
+        }
+      ]
+    }
+  ]
+}

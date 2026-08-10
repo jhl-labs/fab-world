@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# architect tool artifacts (contain local machine paths)
+.architect/
+projects/
+.audit-gas-*.png

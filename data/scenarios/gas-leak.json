@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "id": "gas-leak-photo-bay",
+  "name": "포토 베이 가스 유출",
+  "kind": "gasLeak",
+  "seed": 42,
+  "params": { "sourceEquipmentId": "lithography-001", "spreadRate": 0.4, "maxRadius": 30, "responderFixDuration": 60 },
+  "steps": [
+    { "trigger": { "type": "time", "delay": 5 }, "actions": [{ "type": "setPhase", "phase": "detected" }] },
+    { "trigger": { "type": "phase", "phase": "detected" }, "actions": [{ "type": "hudMessage", "text": "가스 센서 이상 감지", "severity": "warning" }] },
+    { "trigger": { "type": "time", "delay": 8 }, "actions": [{ "type": "setPhase", "phase": "alarm" }] },
+    { "trigger": { "type": "phase", "phase": "alarm" }, "actions": [
+      { "type": "hudMessage", "text": "가스 유출 경보 — 전원 대피 · 휴머노이드 격리 및 병렬 설비 점검 시작", "severity": "danger" }
+    ] },
+    { "trigger": { "type": "time", "delay": 12 }, "actions": [{ "type": "setPhase", "phase": "response" }] },
+    { "trigger": { "type": "time", "delay": 18 }, "actions": [{ "type": "setPhase", "phase": "evacuation" }] }
+  ],
+  "cameraCues": [
+    { "on": { "phase": "detected" }, "shot": "closeup", "target": "hazard-source", "duration": 3 },
+    { "on": { "phase": "alarm" }, "shot": "evacuation-wide", "target": "fab-and-muster", "duration": 5 },
+    { "on": { "phase": "evacuation" }, "shot": "egress", "target": "exit-flow", "duration": 6 }
+  ]
+}

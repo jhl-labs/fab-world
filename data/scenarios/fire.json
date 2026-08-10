@@ -1,0 +1,13 @@
+{
+  "version": "1.0", "id": "fire-etch-bay", "name": "에칭 베이 화재", "kind": "fire", "seed": 84,
+  "params": { "sourceEquipmentId": "etcher-011", "spreadRate": 0.2, "maxRadius": 24, "responderFixDuration": 70 },
+  "steps": [
+    { "trigger": { "type": "time", "delay": 3 }, "actions": [{ "type": "setPhase", "phase": "detected" }] },
+    { "trigger": { "type": "time", "delay": 6 }, "actions": [{ "type": "setPhase", "phase": "alarm" }] },
+    { "trigger": { "type": "phase", "phase": "alarm" }, "actions": [{ "type": "overrideBehavior", "selector": "type:person role:!responder", "behavior": "evacuate" }, { "type": "overrideBehavior", "selector": "type:agv", "behavior": "halt" }, { "type": "dispatchResponder", "count": 3, "to": "hazard-source" }, { "type": "hudMessage", "text": "화재 경보 — 소방 접근로를 확보합니다", "severity": "danger" }] },
+    { "trigger": { "type": "time", "delay": 12 }, "actions": [{ "type": "setPhase", "phase": "response" }] },
+    { "trigger": { "type": "time", "delay": 18 }, "actions": [{ "type": "setPhase", "phase": "evacuation" }] },
+    { "trigger": { "type": "time", "delay": 90 }, "actions": [{ "type": "setPhase", "phase": "allClear" }] }
+  ],
+  "cameraCues": [{ "on": { "phase": "detected" }, "shot": "closeup", "target": "hazard-source", "duration": 3 }]
+}

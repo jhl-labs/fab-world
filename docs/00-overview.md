@@ -2,7 +2,8 @@
 
 ## 1. 프로젝트 목적
 
-FabWorld는 반도체 팹(Fab) 내부 상황을 **브라우저(WebGL)에서 실시간 3D로 시뮬레이션**하는 프로젝트다.
+FabWorld는 반도체 팹(Fab)에서 **Open-RMF가 운영하는 휴머노이드와 이기종 로봇의 실제 활동을
+브라우저(WebGL)에서 실시간 3D로 시연**하는 프로젝트다.
 
 핵심 시나리오는 **인간-로봇 협업 환경에서의 재난/비상 대응 시연**이다:
 
@@ -12,6 +13,9 @@ FabWorld는 반도체 팹(Fab) 내부 상황을 **브라우저(WebGL)에서 실�
 
 위 상황에서 **사람, OHT, AGV, IGV, 설비**가 각각 어떻게 감지 → 전파 → 대피/대응하는지를
 설득력 있는 연출로 보여주는 것이 최종 목표다.
+
+재난은 목적이 아니라 휴머노이드의 장점이 가장 선명해지는 증명 상황이다. 평시 설비 점검부터
+비상 시 현장 확인·사람용 안전 설비 조작까지 하나의 Open-RMF 태스크 서사로 연결한다.
 
 ## 2. 핵심 요구사항
 
@@ -71,3 +75,6 @@ FabWorld는 반도체 팹(Fab) 내부 상황을 **브라우저(WebGL)에서 실�
 | [07-emergency-scenarios.md](07-emergency-scenarios.md) | 재난 시나리오 설계 (가스/화재/응급환자) |
 | [08-data-schema.md](08-data-schema.md) | 레이아웃·시나리오 JSON 스키마 |
 | [09-roadmap.md](09-roadmap.md) | 구현 로드맵 및 마일스톤 |
+| [10-humanoid-rmf-demo.md](10-humanoid-rmf-demo.md) | Open-RMF 휴머노이드 운영 시연과 사실적 행동 기준 |
+| [11-implementation-audit.md](11-implementation-audit.md) | 현재 구현 추적표, 검증 결과, 외부 연계 잔여 항목 |
+| [12-rmf-bridge-deployment.md](12-rmf-bridge-deployment.md) | 실행 가능한 RMF Bridge 배포·Fleet Adapter 연계 런북 |

@@ -43,6 +43,8 @@ idle ──carrier 도착──▶ loading ──▶ processing ──▶ unload
 
 - `processing`은 프로세스 윈도우(타입별 60~600 sim초)를 가지며 진행률을 노출 → 렌더에서 상태등으로 표현.
 - 설비는 **가스 유출 시나리오의 발생원**이 될 수 있다 (`hazardCapable: true`).
+- 재난 중 영향권 설비는 `held`로 전환하며 직전 `idle/loading/processing/unloading` 단계와 진행률을
+  보존한다. allClear 후 같은 단계부터 재개한다.
 
 ### Loadport
 - 설비 전면의 캐리어 도킹 위치. `reserved | occupied | free` 상태로 반송 예약 관리.
@@ -54,6 +56,7 @@ idle ──carrier 도착──▶ loading ──▶ processing ──▶ unload
 | OHT | 160 | 5.0 m/s (레일) | 천장 레일 | 베이 간 캐리어 장거리 반송 |
 | AGV | 160 | 1.5 m/s | 지상 도로 | 베이 내/근거리 캐리어 반송 |
 | IGV | 8 | 1.7 m/s | 지상 도로 | 대형 자재/특수 반송 |
+| Humanoid | 2 | 1.15 m/s | 보행/RMF 공유 그래프 | 설비 점검, 사람용 안전 설비 조작, 현장 보고 |
 | Person | 100 | 1.2 m/s | 보행 그래프 | 순회 점검, 설비 작업, PM |
 | RobotArm | 18 | 고정 | 베이 내 | 로드포트 캐리어 핸들링 연출 |
 
@@ -62,7 +65,7 @@ idle ──carrier 도착──▶ loading ──▶ processing ──▶ unload
 ```ts
 interface Agent {
   id: EntityId
-  kind: 'oht' | 'agv' | 'igv' | 'person' | 'arm'
+  kind: 'oht' | 'agv' | 'igv' | 'humanoid' | 'person' | 'arm'
   pose: { x, y, z, yaw }          // PoseBuffer에 존재
   status: 'idle' | 'moving' | 'working' | 'waiting' | 'charging' | 'error'
   emergencyState: EmergencyBehavior   // [07] 참조: normal | halt | yield | evacuate | respond
@@ -84,6 +87,15 @@ interface Agent {
 - role: `engineer | operator | responder(방재요원)`
 - 행동 트리(단순 상태머신): `patrol → inspect(설비 앞 작업 애니) → walk → idle` 루프.
 - 비상 시 evacuate 행동으로 전환 ([07] 참조). GLTF 스키닝 애니메이션: `idle / walk / run / work / collapse`.
+
+### Humanoid
+- Open-RMF fleet: `fab_humanoid_fleet`, 기본 2대.
+- 태스크: `inspection_round | gas_isolation | medical_support`.
+- 상태: `queued → assigned → navigating → observing → interacting → reporting → returning → completed`.
+- inspection의 일반 `reporting`은 정상 결과일 수 있다. 통합 시연의 후속 사건은
+  `inspection_anomaly_reported`가 명시된 reporting에서만 시작한다.
+- 실제 RMF pose가 들어오면 로컬 적분을 중단하고 RMF를 권위 데이터로 사용한다.
+- 상세 시연과 상호작용 기준은 [10](10-humanoid-rmf-demo.md) 참조.
 
 ## 4. 반송 미션 (Transport Mission)
 

@@ -1,0 +1,48 @@
+{
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 4190,
+    "path": "/fabworld"
+  },
+  "rmfWeb": {
+    "baseUrl": "http://127.0.0.1:8000",
+    "fleet": "fab_humanoid_fleet",
+    "pollMs": 250,
+    "timeoutMs": 3000
+  },
+  "allowedOrigins": [
+    "https://fabworld.example.com"
+  ],
+  "maps": {
+    "L1": {
+      "fabMap": "fab-L1",
+      "offsetX": 0,
+      "offsetZ": 0,
+      "yaw": 0,
+      "scale": 1
+    }
+  },
+  "navigationWaypoints": [
+    {
+      "map": "L1",
+      "waypoint": "demo_inspection_northwest",
+      "x": -82.7,
+      "y": -85.1,
+      "maxDistance": 8
+    },
+    {
+      "map": "L1",
+      "waypoint": "demo_gas_valve_west",
+      "x": -81.75,
+      "y": -69,
+      "maxDistance": 4
+    },
+    {
+      "map": "L1",
+      "waypoint": "demo_medical_rendezvous_west",
+      "x": -60,
+      "y": -90,
+      "maxDistance": 18
+    }
+  ]
+}

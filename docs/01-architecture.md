@@ -4,16 +4,18 @@
 
 | 영역 | 선택 | 사유 |
 |---|---|---|
-| 언어 | TypeScript 5.x (strict) | 타입 안정성 |
-| 빌드 | Vite 6 | HMR, worker 번들링 내장 |
-| 3D | **Three.js (순수, r170+)** | R3F 제외 — 이전 프로젝트에서 React 리렌더와 고빈도 3D 갱신의 충돌로 우회책이 누적됨. 씬 그래프는 명령형으로 직접 관리 |
-| UI(HUD) | React 18 + zustand | 패널/버튼/타임라인 등 저빈도 UI만 담당 |
+| 언어 | TypeScript 6 (strict) | 타입 안정성 |
+| 빌드 | Vite 8 | HMR, worker 번들링 내장 |
+| 3D | **Three.js (순수, r185)** | R3F 제외 — 이전 프로젝트에서 React 리렌더와 고빈도 3D 갱신의 충돌로 우회책이 누적됨. 씬 그래프는 명령형으로 직접 관리 |
+| UI(HUD) | React 19 + zustand 5 + CSS | 패널/버튼/타임라인 등 저빈도 UI만 담당 |
 | 스키마 | zod 4 | 레이아웃·시나리오 JSON 검증, 타입 추론 |
 | 테스트 | vitest | 시뮬레이션 코어는 DOM 없이 순수 로직 → 테스트 용이 |
 | 스타일 | Tailwind CSS | HUD 전용 |
 
-**서버 없음.** 이전 프로젝트의 gateway(권위 서버)는 폐기한다. 시뮬레이션은 브라우저 안에서
-Web Worker로 실행한다. 정적 호스팅만으로 배포 가능.
+독립 시연은 **서버 없음**으로 동작한다. 이전 프로젝트의 자체 권위 gateway는 폐기하고
+시뮬레이션은 브라우저 안의 Web Worker에서 실행한다. 실제 Open-RMF 연계 시에만 ROS/RMF의
+버전별 메시지를 정규화하는 얇은 RMF Bridge를 외부 시스템 경계에 둔다. 상세 계약은
+[10-humanoid-rmf-demo.md](10-humanoid-rmf-demo.md)를 참조한다.
 
 ## 2. 스레드/프로세스 구조
 
@@ -31,6 +33,11 @@ Web Worker로 실행한다. 정적 호스팅만으로 배포 가능.
 │               │  (Float32Array, lock-free)    │                │
 │               └───── postMessage: 이벤트/명령(저빈도) ────────┘ │
 └────────────────────────────────────────────────────────────────┘
+                     ▲
+                     │ normalized WebSocket (LIVE)
+           Open-RMF / Humanoid Fleet Adapter / RMF Bridge
+                     │
+                     └── validated RMF trace (REPLAY fallback)
 ```
 
 ### 통신 채널 2종
@@ -42,7 +49,7 @@ Web Worker로 실행한다. 정적 호스팅만으로 배포 가능.
 2. **이벤트/명령 채널 (저빈도)** — `postMessage`.
    - Main → Worker: `setTimeScale`, `pause`, `loadScenario`, `triggerEmergency`, `spawnEntity`...
    - Worker → Main: `entitySpawned/Removed`, `missionCompleted`, `emergencyPhaseChanged`,
-     `metrics`(1Hz), `log`. 렌더러의 구조 변화(개체 생성/삭제)와 HUD 갱신에만 사용.
+     `metrics`, 변경 시 `equipment` 상태 묶음, `log`. 렌더러의 구조 변화와 HUD 갱신에만 사용.
 
 **원칙: 위치는 버퍼로, 사건은 메시지로.**
 
@@ -83,10 +90,12 @@ fab-world/
 │   │   ├── camera/           # Orbit / Follow / FirstPerson 컨트롤러
 │   │   └── interpolate.ts    # PoseBuffer → 화면 보간
 │   ├── ui/                   # React HUD (시간 컨트롤, 시나리오 패널, 미니맵, 개체 정보)
-│   ├── app.ts                # 부트스트랩: worker 생성, 렌더러/HUD 연결
+│   ├── integrations/rmf/     # Open-RMF Bridge 클라이언트, trace 기록 계약·wall-clock 재생
+│   ├── app.tsx               # 부트스트랩: worker 생성, 렌더러/HUD 연결
 │   └── main.tsx
 ├── data/
 │   ├── layouts/fab-default.json   # 팹 레이아웃 (SSOT)
+│   ├── rmf-traces/                 # 합성 참조 trace; 실제 기록과 UI에서 구분
 │   └── scenarios/                 # gas-leak.json, fire.json, medical.json
 └── tests/
 ```
@@ -116,6 +125,8 @@ fab-world/
 
 - 시뮬레이션은 고정 타임스텝(60Hz) + 시드 RNG(`core/math/rng.ts`)만 사용.
 - `Date.now()`/`Math.random()` 사용 금지 → 같은 시드·같은 시나리오면 항상 같은 결과.
+- JSON 시나리오를 로드할 때 Worker는 진행 중이던 월드 상태를 겹쳐 쓰지 않고, 시나리오의
+  `seed`로 `SimWorld`를 다시 만든다. RMF 연결 권위와 pose 버퍼는 새 월드에 승계한다.
 - 효과: 재현 가능한 데모, 리플레이 기능 확장 여지, 테스트 가능성.
 
 ## 6. 성능 목표 (수치 계약)

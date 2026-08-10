@@ -1,0 +1,48 @@
+{
+  "name": "fab-world",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node scripts/test-e2e.mjs && tsx scripts/test-rmf-bridge-e2e.ts && node scripts/test-rmf-trace-e2e.mjs",
+    "test:acceptance": "tsx scripts/acceptance-scenarios.ts",
+    "test:stress": "tsx scripts/stress-evacuation.ts",
+    "test:human-motion": "tsx scripts/audit-human-motion.ts",
+    "bridge:rmf": "tsx services/rmf-bridge/server.ts",
+    "record:rmf": "tsx scripts/record-rmf-trace.ts",
+    "calibrate:rmf": "tsx scripts/calibrate-rmf-map.ts",
+    "generate:rmf-trace": "tsx scripts/generate-rmf-trace.ts",
+    "benchmark:sim": "tsx scripts/benchmark-sim.ts",
+    "generate:layout": "tsx scripts/generate-layout.ts",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "three": "latest",
+    "ws": "^8.21.1",
+    "zod": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/three": "^0.185.1",
+    "@types/ws": "latest",
+    "eslint": "latest",
+    "playwright-core": "^1.62.0",
+    "tsx": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "^8.65.0",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}
