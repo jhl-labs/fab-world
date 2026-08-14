@@ -10,19 +10,13 @@ function runFor(world: SimWorld, seconds: number): void {
   for (let tick = 0; tick < seconds * SIM_HZ; tick++) world.tick(FIXED_DT)
 }
 
-const baselineWorld = new SimWorld(layout, 42)
-runFor(baselineWorld, 240)
-const beforeBaselineWindow = baselineWorld.completedProcesses
-runFor(baselineWorld, 60)
-const baselineThroughput = baselineWorld.completedProcesses - beforeBaselineWindow
-
 const showcaseWorld = new SimWorld(layout, 20260729)
 showcaseWorld.startHumanoidShowcase()
 let showcaseIncidentAt: number | undefined
 let showcaseGasTaskAt: number | undefined
 let showcaseVerifiedAt: number | undefined
 let showcaseReturnedToNormalAt: number | undefined
-for (let tick = 0; tick < 220 * SIM_HZ; tick++) {
+for (let tick = 0; tick < 240 * SIM_HZ; tick++) {
   showcaseWorld.tick(FIXED_DT)
   showcaseIncidentAt ??= showcaseWorld.events.some((event) =>
     event.message?.includes('가스 이상 징후를 보고')
@@ -49,7 +43,16 @@ if (
   showcaseVerifiedAt === undefined ||
   showcaseReturnedToNormalAt === undefined
 ) {
-  throw new Error('Integrated showcase did not complete its inspection→incident→gas verification→recovery chain')
+  throw new Error(`Integrated showcase did not complete its inspection→incident→gas verification→recovery chain: ${JSON.stringify({
+    incidentAt: showcaseIncidentAt,
+    gasTaskAt: showcaseGasTaskAt,
+    verifiedAt: showcaseVerifiedAt,
+    returnedToNormalAt: showcaseReturnedToNormalAt,
+    phase: showcaseWorld.emergency.phase,
+    evacuated: showcaseWorld.metrics.evacuated,
+    totalEvacuees: showcaseWorld.metrics.totalEvacuees,
+    tasks: showcaseWorld.humanoidTasks.map((task) => ({ kind: task.kind, status: task.status, robotId: task.robotId }))
+  })}`)
 }
 if (!(showcaseIncidentAt <= showcaseGasTaskAt && showcaseGasTaskAt < showcaseVerifiedAt)) {
   throw new Error(
@@ -82,7 +85,7 @@ if (
   !comparisonHuman ||
   comparisonHuman.humanEntries !== 1 ||
   comparisonHuman.humanoidEntries !== 0 ||
-  comparisonHuman.humanWorkZoneSeconds < 6.2 ||
+  comparisonHuman.humanWorkZoneSeconds < 8.2 ||
   !comparisonHuman.verified
 ) {
   throw new Error(`Human A/B baseline is not a verified direct-work observation: ${JSON.stringify(comparisonHuman)}`)
@@ -220,6 +223,11 @@ if (
 }
 const gasControlSource = gasWorld.emergency.controlledBy
 while (gasWorld.emergency.phase !== 'normal' && gasWorld.simTime < 310) gasWorld.tick(FIXED_DT)
+const baselineWorld = new SimWorld(layout, 42)
+runFor(baselineWorld, gasWorld.simTime)
+const beforeBaselineWindow = baselineWorld.completedProcesses
+runFor(baselineWorld, 60)
+const baselineThroughput = baselineWorld.completedProcesses - beforeBaselineWindow
 const beforeRecovery = gasWorld.completedProcesses
 runFor(gasWorld, 60)
 const recoveredThroughput = gasWorld.completedProcesses - beforeRecovery

@@ -18,7 +18,11 @@ export class CameraController {
   private keys = new Set<string>()
   private snapFollow = false
   private snapOrbit = false
-  constructor(element: HTMLElement, private readonly bounds: { width: number; depth: number }) {
+  constructor(
+    element: HTMLElement,
+    private readonly bounds: { width: number; depth: number },
+    private readonly onUserModeChange?: (mode: CameraMode) => void
+  ) {
     this.camera.position.set(110, 120, 135)
     element.addEventListener('pointerdown', (event) => { this.dragging = true; this.pointerX = event.clientX; element.setPointerCapture(event.pointerId) })
     element.addEventListener('pointerup', (event) => { this.dragging = false; element.releasePointerCapture(event.pointerId) })
@@ -26,7 +30,14 @@ export class CameraController {
       if (!this.dragging) return
       const dx = event.clientX - this.pointerX; this.pointerX = event.clientX
       if (this.mode === 'firstPerson') { this.azimuth -= dx * 0.004; this.polar = clamp(this.polar + event.movementY * 0.003, 0.15, Math.PI - 0.15) }
-      else { this.azimuth -= dx * 0.006; this.polar = clamp(this.polar + event.movementY * 0.006, 0.16, 1.48); this.mode = 'orbit' }
+      else {
+        this.azimuth -= dx * 0.006
+        this.polar = clamp(this.polar + event.movementY * 0.006, 0.16, 1.48)
+        if (this.mode !== 'orbit') {
+          this.mode = 'orbit'
+          this.onUserModeChange?.('orbit')
+        }
+      }
     })
     element.addEventListener('wheel', (event) => { this.distance = clamp(this.distance + event.deltaY * 0.09, 8, 350) }, { passive: true })
     window.addEventListener('keydown', (event) => this.keys.add(event.code)); window.addEventListener('keyup', (event) => this.keys.delete(event.code))

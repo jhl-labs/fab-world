@@ -37,8 +37,12 @@ export function resolveHumanoidTarget(world: SimWorld, request: HumanoidTaskRequ
         ? world.entities.find((entity) => entity.id === request.targetId && entity.kind === 'person')
         : world.entities.find((entity) => entity.kind === 'person' && entity.personActivity === 'collapsed')
     if (patient) {
-      const availableRobot = world.entities
+      const availableRobots = world.entities
         .filter((entity) => entity.kind === 'humanoid' && !entity.taskId)
+      // H2 is the modeled safety-response unit. Keep the rendezvous and local
+      // assignment tied to that role when it is available, while preserving a
+      // nearest-idle fallback if the safety unit is already committed.
+      const availableRobot = availableRobots.find((entity) => entity.id === 'humanoid-002') ?? availableRobots
         .sort((left, right) =>
           Math.hypot(left.x - patient.x, left.z - patient.z) -
           Math.hypot(right.x - patient.x, right.z - patient.z)

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type { EmergencyKind, EmergencyPhase, FabLayout } from '../core/schema'
 import type { EntityMeta, EquipmentStateView } from '../core/protocol'
+import { equipmentAccessPoint } from '../core/layout'
 import { AgentRenderer } from './agents/agentRenderer'
 import { CarrierRenderer } from './agents/carrierRenderer'
 import { ContactShadowRenderer } from './agents/contactShadowRenderer'
@@ -49,15 +50,24 @@ export class RenderEngine {
   private frameWindow = 0
   private stats: RenderStats = { fps: 0, drawCalls: 0, triangles: 0 }
   private readonly source: readonly [number, number]
+  private readonly layout: FabLayout
   private readonly shotAnchors: ShotAnchor[]
   private readonly shotObstacles: ShotObstacle[]
-  constructor(private readonly container: HTMLElement, layout: FabLayout, entities: EntityMeta[], poseBuffer?: SharedArrayBuffer, onStats?: (stats: RenderStats) => void) {
+  constructor(
+    private readonly container: HTMLElement,
+    layout: FabLayout,
+    entities: EntityMeta[],
+    poseBuffer?: SharedArrayBuffer,
+    onStats?: (stats: RenderStats) => void,
+    onUserCameraModeChange?: (mode: CameraMode) => void
+  ) {
+    this.layout = layout
     this.reader = new PoseReader(poseBuffer)
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' }); this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); this.renderer.setSize(container.clientWidth, container.clientHeight); this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.autoUpdate = true; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1; container.append(this.renderer.domElement)
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' }); this.renderer.domElement.setAttribute('aria-hidden', 'true'); this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); this.renderer.setSize(container.clientWidth, container.clientHeight); this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.autoUpdate = true; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1; container.append(this.renderer.domElement)
     this.scene.background = new THREE.Color(0xeef2f7); this.scene.fog = new THREE.Fog(0xeef2f7, 170, 520)
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0xd8dee7, 2.2)); const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(80, 150, 50); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); this.scene.add(sun)
     this.scene.add(buildFabScene(layout)); this.equipmentStatus = new EquipmentStatusRenderer(this.scene, layout); this.safetyDevices = new SafetyDeviceAnimator(this.scene, layout, entities); this.contactShadows = new ContactShadowRenderer(this.scene, entities); this.agents = new AgentRenderer(this.scene, entities); this.carriers = new CarrierRenderer(this.scene, entities); this.humanoids = new HumanoidRenderer(this.scene, entities); this.people = new PersonRenderer(this.scene, entities); this.fx = new EmergencyFx(this.scene); this.interactionCue = new InteractionCue(this.scene); this.labels = new EntityLabelRenderer(container, entities)
-    this.camera = new CameraController(this.renderer.domElement, layout.fab)
+    this.camera = new CameraController(this.renderer.domElement, layout.fab, onUserCameraModeChange)
     this.shotAnchors = buildShotAnchors(layout)
     this.shotObstacles = buildShotObstacles(layout)
     const first = layout.bays.flatMap((bay) => bay.equipment).find((equipment) => equipment.hazardCapable) ?? layout.bays[0]!.equipment[0]!; this.source = [first.position[0], first.position[2]]
@@ -182,9 +192,25 @@ export class RenderEngine {
       0.8
     )
   }
-  setEmergency(kind: EmergencyKind | undefined, phase: EmergencyPhase, position?: readonly [number, number]): void { if (phase === 'normal') this.safetyDevices.reset(); this.fx.setState(kind, phase, position ?? this.source) }
+  setEmergency(kind: EmergencyKind | undefined, phase: EmergencyPhase, position?: readonly [number, number]): void {
+    if (phase === 'normal') this.safetyDevices.reset()
+    const incidentPosition = position ?? this.source
+    const sourceEquipment = kind === 'gasLeak'
+      ? this.layoutEquipmentAt(incidentPosition)
+      : undefined
+    const access = sourceEquipment ? equipmentAccessPoint(sourceEquipment) : undefined
+    const emitterOffset = access
+      ? [access[0] - incidentPosition[0], access[1] - incidentPosition[1]] as const
+      : undefined
+    this.fx.setState(kind, phase, incidentPosition, emitterOffset)
+  }
   setHazardRadius(radius: number): void { this.fx.setRadius(radius) }
   setEquipmentStates(states: EquipmentStateView[]): void { this.equipmentStatus.setStates(states) }
   dispose(): void { this.active = false; this.resizeObserver.disconnect(); this.labels.dispose(); this.equipmentStatus.dispose(); this.contactShadows.dispose(); this.agents.dispose(); this.carriers.dispose(); this.humanoids.dispose(); this.people.dispose(); this.interactionCue.dispose(); this.fx.dispose(); this.renderer.dispose(); this.renderer.domElement.remove() }
   private resize(): void { const width = Math.max(1, this.container.clientWidth); const height = Math.max(1, this.container.clientHeight); this.renderer.setSize(width, height); this.camera.camera.aspect = width / height; this.camera.camera.updateProjectionMatrix() }
+  private layoutEquipmentAt(position: readonly [number, number]): FabLayout['bays'][number]['equipment'][number] | undefined {
+    return this.layout.bays
+      .flatMap((bay) => bay.equipment)
+      .find((equipment) => Math.hypot(equipment.position[0] - position[0], equipment.position[2] - position[1]) < 0.2)
+  }
 }

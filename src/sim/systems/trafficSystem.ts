@@ -1,7 +1,8 @@
 import type { SimWorld } from '../world'
 import type { SimEntity } from '../types'
+import { isStationaryGroundRobot } from './movementSystem'
 
-function rightOfWay(entity: SimEntity): number {
+function rightOfWay(world: SimWorld, entity: SimEntity): number {
   // Responders keep right-of-way while clearing the treatment perimeter after
   // loading; otherwise a stretcher vehicle and a yielding responder can
   // mutually block each other at sub-metre distance.
@@ -11,8 +12,24 @@ function rightOfWay(entity: SimEntity): number {
     (entity.behavior === 'respond' || entity.auxB > 0.5)
   ) return 7
   if (entity.kind === 'person' && entity.personActivity === 'yieldingToRobot') return 6
-  if (entity.kind === 'igv' && entity.mission === 'medical-transport' && entity.behavior === 'respond') return 6
+  if (
+    entity.kind === 'igv' &&
+    entity.mission === 'medical-transport' &&
+    entity.behavior === 'respond' &&
+    entity.auxA > 0.5
+  ) return 8
   if (entity.kind === 'person') return 5
+  if (entity.kind === 'humanoid' && entity.emergency && entity.auxB > 0.5) return 9
+  // Gas isolation is urgent, but the robot must not claim a shared egress
+  // lane from people who are still evacuating. Once the aisle is clear its
+  // emergency travel speed remains available for the long valve approach.
+  if (entity.kind === 'humanoid' && entity.emergency && entity.auxB < -0.5) {
+    const task = entity.taskId
+      ? world.humanoidTasks.find((candidate) => candidate.id === entity.taskId)
+      : undefined
+    if (task?.kind === 'gas_isolation' && task.requestedBy !== 'showcase') return 4
+  }
+  if (entity.kind === 'humanoid' && entity.emergency) return 6
   if (entity.kind === 'humanoid') return 4
   if (entity.behavior === 'respond') return 3
   return 1
@@ -30,13 +47,14 @@ export function updateTraffic(world: SimWorld): void {
     const bucket = buckets.get(bucketKey)
     if (bucket) bucket.push(entity); else buckets.set(bucketKey, [entity])
   }
+  const priorityByEntity = new Map(world.entities.map((entity) => [entity, rightOfWay(world, entity)]))
   for (const entity of world.entities) {
     entity.speed = Math.min(entity.speed, entity.maxSpeed)
     if (entity.carriedById) { entity.trafficSpeedLimit = 0; continue }
     if (entity.behavior === 'halt') { entity.speed = 0; entity.trafficSpeedLimit = 0; entity.status = 'waiting'; continue }
     if (entity.kind === 'arm') continue
     let limit = entity.maxSpeed
-    const entityPriority = rightOfWay(entity)
+    const entityPriority = priorityByEntity.get(entity)!
     const cellX = Math.floor(entity.x / cellSize)
     const cellZ = Math.floor(entity.z / cellSize)
     const range = entity.kind === 'person' ? 1 : 3
@@ -47,22 +65,51 @@ export function updateTraffic(world: SimWorld): void {
       const distance = Math.hypot(dx, dz)
       if (distance > (entity.kind === 'person' ? 2.4 : entity.kind === 'humanoid' ? 4.5 : 8.4)) continue
       const facing = Math.cos(entity.yaw) * dx + Math.sin(entity.yaw) * dz
-      const stationaryHumanoid =
-        other.kind === 'humanoid' &&
-        (other.rmfControlled || other.activity === 'safeStop' || (other.speed < 0.05 && other.status !== 'moving'))
-      if (entity.kind === 'person' && stationaryHumanoid && (facing >= 0 || distance < 0.72)) {
+      const stationaryGroundRobot = isStationaryGroundRobot(other)
+      if (entity.kind === 'person' && stationaryGroundRobot && (facing >= 0 || distance < 0.72)) {
         // A safe-stopped or externally pose-controlled robot cannot yield its
         // body even though people normally have right of way. Slow the person
         // before contact; the movement system enforces the final body envelope.
+        if (other.kind === 'humanoid') {
+          limit = Math.min(
+            limit,
+            distance <= 0.72
+              ? entity.maxSpeed * 0.12
+              : entity.maxSpeed * Math.min(0.65, Math.max(0.12, (distance - 0.72) / 0.7))
+          )
+        } else {
+          // A stopped vehicle is wider but low and predictable. Keep enough
+          // forward motion for the lateral solver to pass it instead of
+          // creating a queue behind every fire-stopped AGV.
+          const bodyClearance = other.kind === 'igv' ? 1.28 : 0.96
+          limit = Math.min(
+            limit,
+            distance <= bodyClearance
+              ? entity.maxSpeed * 0.28
+              : entity.maxSpeed * Math.min(0.86, Math.max(0.45, (distance - bodyClearance) / 0.8))
+          )
+        }
+        // The stationary-body branch above deliberately leaves a small
+        // amount of forward motion so movementSystem can generate a lateral
+        // pass. Do not feed the same pair into the generic priority rule
+        // below: an emergency safe-stop humanoid has a higher priority there
+        // and would turn that reduced speed back into a hard zero, leaving an
+        // evacuation queue permanently parked behind the guide.
+        continue
+      }
+      if (entity.kind === 'humanoid' && stationaryGroundRobot && facing >= 0) {
+        // A walking humanoid can route around a parked body. Preserve a slow
+        // stride for the lateral steering solver instead of entering the
+        // generic robot/robot zero-speed deadlock several metres away.
+        const bodyClearance = 0.28 + (other.kind === 'igv' ? 0.96 : other.kind === 'agv' ? 0.64 : 0.28)
         limit = Math.min(
           limit,
-          distance <= 0.72
-            ? entity.maxSpeed * 0.12
-            : entity.maxSpeed * Math.min(0.65, Math.max(0.12, (distance - 0.72) / 0.7))
+          entity.maxSpeed * (distance <= bodyClearance + 0.12 ? 0.18 : 0.48)
         )
+        continue
       }
       if (facing < 0) continue
-      const otherPriority = rightOfWay(other)
+      const otherPriority = priorityByEntity.get(other)!
       if (otherPriority > entityPriority) {
         const goalDx = entity.goalX - entity.x
         const goalDz = entity.goalZ - entity.z
@@ -76,7 +123,6 @@ export function updateTraffic(world: SimWorld): void {
         continue
       }
       if (otherPriority < entityPriority) {
-        if (entity.kind === 'igv' && entity.mission === 'medical-transport' && other.kind === 'person') limit = Math.min(limit, distance < 0.8 ? 0 : entity.maxSpeed * 0.55)
         continue
       }
       if (entity.kind === 'person' && other.kind === 'person') {
@@ -103,6 +149,13 @@ export function updateTraffic(world: SimWorld): void {
         )
       }
       else if (entity.kind !== 'person' && other.kind !== 'person') {
+        if (entity.kind === 'humanoid') {
+          // Humanoids use the body-aware lateral solver in shared ground
+          // space. A blanket 5.1m vehicle headway otherwise deadlocks a
+          // walking guide behind a parked robot in an adjacent lane.
+          limit = Math.min(limit, entity.maxSpeed * (distance < 0.74 ? 0.18 : 0.48))
+          continue
+        }
         const coordinatedRemotePair =
           (entity.mission === 'hazmat-equipment' || entity.mission === 'remote-equipment-inspection') &&
           (other.mission === 'hazmat-equipment' || other.mission === 'remote-equipment-inspection')

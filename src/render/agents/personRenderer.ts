@@ -1,4 +1,6 @@
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { PoseFlags, type EntityMeta } from '../../core/protocol'
 import type { PoseReader } from '../interpolate'
 
@@ -57,27 +59,160 @@ const partOrder: BodyPart[] = [
 // Fab personnel remain in cleanroom coveralls during alarms. Operators and
 // engineers use pale, role-tinted suits; emergency responders add the orange
 // chemical-response layer and helmet.
-const roleColor = { engineer: 0xb9d6df, operator: 0xe2ebf1, responder: 0xd87836 } as const
+const roleColor = { engineer: 0x9fc8d6, operator: 0xd4e2ea, responder: 0xd87836 } as const
+
+interface GeometryLayer {
+  geometry: THREE.BufferGeometry
+  tint?: number
+  position?: readonly [number, number, number]
+  rotation?: readonly [number, number, number]
+  scale?: readonly [number, number, number]
+}
+
+function layeredGeometry(layers: GeometryLayer[]): THREE.BufferGeometry {
+  const prepared = layers.map((layer) => {
+    const geometry = layer.geometry
+    if (layer.scale) geometry.scale(...layer.scale)
+    if (layer.rotation) geometry.rotateX(layer.rotation[0]).rotateY(layer.rotation[1]).rotateZ(layer.rotation[2])
+    if (layer.position) geometry.translate(...layer.position)
+    const normalized = geometry.index ? geometry.toNonIndexed() : geometry
+    if (normalized !== geometry) geometry.dispose()
+    const tint = new THREE.Color(layer.tint ?? 0xffffff)
+    const colors = new Float32Array(normalized.getAttribute('position').count * 3)
+    for (let offset = 0; offset < colors.length; offset += 3) {
+      colors[offset] = tint.r
+      colors[offset + 1] = tint.g
+      colors[offset + 2] = tint.b
+    }
+    normalized.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    return normalized
+  })
+  const merged = mergeGeometries(prepared, false)
+  prepared.forEach((geometry) => geometry.dispose())
+  if (!merged) throw new Error('Failed to merge cleanroom personnel geometry')
+  return merged
+}
+
+function roundedBox(width: number, height: number, depth: number, radius: number): THREE.BufferGeometry {
+  // One bevel segment keeps the PPE silhouette soft at follow-camera scale
+  // while avoiding hundreds of thousands of duplicate instanced vertices.
+  return new RoundedBoxGeometry(width, height, depth, 1, radius)
+}
 
 function geometryFor(part: BodyPart): THREE.BufferGeometry {
-  if (part === 'medicalKit') return new THREE.BoxGeometry(0.16, 0.2, 0.28)
-  if (part === 'medicalMarkVertical') return new THREE.BoxGeometry(0.018, 0.11, 0.04)
-  if (part === 'medicalMarkHorizontal') return new THREE.BoxGeometry(0.018, 0.04, 0.11)
-  if (part === 'fireExtinguisher') return new THREE.CylinderGeometry(0.07, 0.07, 0.28, 10)
-  if (part === 'fireNozzle') return new THREE.BoxGeometry(0.2, 0.045, 0.05)
-  if (part === 'gasDetector') return new THREE.BoxGeometry(0.055, 0.18, 0.11)
-  if (part === 'gasDetectorScreen') return new THREE.BoxGeometry(0.058, 0.085, 0.072)
-  if (part.endsWith('Hand')) return new THREE.SphereGeometry(0.062, 8, 6)
-  if (part.endsWith('Boot')) return new THREE.BoxGeometry(0.23, 0.1, 0.15)
-  if (part === 'hardhat') return new THREE.SphereGeometry(0.165, 12, 8)
-  if (part === 'hardhatBrim') return new THREE.CylinderGeometry(0.185, 0.185, 0.024, 12)
-  if (part === 'head') return new THREE.SphereGeometry(0.14, 12, 9)
-  if (part === 'visor') return new THREE.BoxGeometry(0.045, 0.11, 0.2)
-  if (part === 'torso') return new THREE.CapsuleGeometry(0.21, 0.32, 3, 8)
-  if (part.endsWith('UpperArm')) return new THREE.CapsuleGeometry(0.058, 0.174, 3, 7)
-  if (part.endsWith('Forearm')) return new THREE.CapsuleGeometry(0.052, 0.146, 3, 7)
-  if (part.endsWith('Thigh')) return new THREE.CapsuleGeometry(0.078, 0.224, 3, 7)
-  return new THREE.CapsuleGeometry(0.068, 0.214, 3, 7)
+  if (part === 'medicalKit') {
+    return layeredGeometry([
+      { geometry: roundedBox(0.16, 0.2, 0.28, 0.025) },
+      { geometry: new THREE.TorusGeometry(0.055, 0.012, 5, 10), position: [0, 0.12, 0], rotation: [0, Math.PI / 2, 0], tint: 0xd6dce1 }
+    ])
+  }
+  if (part === 'medicalMarkVertical') return layeredGeometry([{ geometry: new THREE.BoxGeometry(0.018, 0.11, 0.04) }])
+  if (part === 'medicalMarkHorizontal') return layeredGeometry([{ geometry: new THREE.BoxGeometry(0.018, 0.04, 0.11) }])
+  if (part === 'fireExtinguisher') {
+    return layeredGeometry([
+      { geometry: new THREE.CylinderGeometry(0.07, 0.07, 0.28, 12) },
+      { geometry: new THREE.CylinderGeometry(0.05, 0.06, 0.05, 12), position: [0, 0.16, 0], tint: 0xd7dde2 }
+    ])
+  }
+  if (part === 'fireNozzle') return layeredGeometry([{ geometry: new THREE.BoxGeometry(0.2, 0.045, 0.05) }])
+  if (part === 'gasDetector') return layeredGeometry([{ geometry: roundedBox(0.055, 0.18, 0.11, 0.016) }])
+  if (part === 'gasDetectorScreen') return layeredGeometry([{ geometry: new THREE.BoxGeometry(0.058, 0.085, 0.072) }])
+  if (part.endsWith('Hand')) {
+    const side = part.startsWith('left') ? -1 : 1
+    return layeredGeometry([
+      { geometry: roundedBox(0.075, 0.105, 0.105, 0.025), position: [0, -0.015, 0] },
+      { geometry: new THREE.CylinderGeometry(0.056, 0.052, 0.04, 10), position: [0, 0.065, 0], tint: 0xc5d0d7 },
+      ...[-0.034, 0, 0.034].map((z): GeometryLayer => ({
+        geometry: new THREE.CylinderGeometry(0.012, 0.012, 0.069, 6),
+        position: [0.006, -0.09, z],
+        tint: 0xe4ecef
+      })),
+      {
+        geometry: new THREE.CylinderGeometry(0.015, 0.015, 0.07, 6),
+        position: [0.005, -0.035, side * 0.061],
+        rotation: [Math.PI / 2, 0, 0.18 * side],
+        tint: 0xd8e4e8
+      }
+    ])
+  }
+  if (part.endsWith('Boot')) {
+    return layeredGeometry([
+      { geometry: roundedBox(0.24, 0.1, 0.15, 0.025), position: [0.01, 0, 0] },
+      { geometry: roundedBox(0.28, 0.028, 0.17, 0.009), position: [0.025, -0.055, 0], tint: 0x56636c },
+      { geometry: new THREE.SphereGeometry(0.075, 10, 7), position: [0.115, 0.005, 0], scale: [0.82, 0.58, 0.92], tint: 0xe8edf0 },
+      { geometry: new THREE.BoxGeometry(0.045, 0.026, 0.125), position: [0.045, 0.052, 0], tint: 0x93a5af },
+      { geometry: new THREE.BoxGeometry(0.045, 0.026, 0.125), position: [0.1, 0.052, 0], tint: 0x93a5af }
+    ])
+  }
+  if (part === 'hardhat') {
+    return layeredGeometry([
+      { geometry: new THREE.SphereGeometry(0.168, 16, 9, 0, Math.PI * 2, 0, Math.PI / 2), scale: [1, 1.04, 1] },
+      { geometry: roundedBox(0.25, 0.035, 0.045, 0.012), position: [0, 0.125, 0], tint: 0xe4e9ed }
+    ])
+  }
+  if (part === 'hardhatBrim') {
+    return layeredGeometry([
+      { geometry: new THREE.CylinderGeometry(0.18, 0.18, 0.022, 16) },
+      { geometry: roundedBox(0.12, 0.02, 0.23, 0.008), position: [0.135, 0, 0], tint: 0xe7ecef }
+    ])
+  }
+  if (part === 'head') {
+    return layeredGeometry([
+      { geometry: new THREE.SphereGeometry(0.14, 16, 11), scale: [0.94, 1.08, 1] },
+      { geometry: new THREE.SphereGeometry(0.105, 8, 6), position: [-0.075, 0.018, 0], scale: [0.72, 1.06, 1.12], tint: 0xe8eef1 },
+      { geometry: new THREE.TorusGeometry(0.125, 0.022, 6, 16), position: [0, -0.145, 0], rotation: [Math.PI / 2, 0, 0], tint: 0xadb9c1 },
+      { geometry: new THREE.BoxGeometry(0.018, 0.17, 0.026), position: [-0.137, 0.018, 0], tint: 0x8ea0aa }
+    ])
+  }
+  if (part === 'visor') {
+    return layeredGeometry([
+      { geometry: roundedBox(0.045, 0.115, 0.205, 0.018) },
+      { geometry: new THREE.BoxGeometry(0.025, 0.025, 0.225), position: [0.016, 0.066, 0], tint: 0xb9c7ce },
+      { geometry: new THREE.BoxGeometry(0.042, 0.038, 0.105), position: [0.034, -0.045, 0], tint: 0x8ea2ad },
+      { geometry: new THREE.CylinderGeometry(0.014, 0.018, 0.04, 8), position: [0.033, -0.045, -0.071], rotation: [0, 0, Math.PI / 2], tint: 0xb6c4cb },
+      { geometry: new THREE.CylinderGeometry(0.014, 0.018, 0.04, 8), position: [0.033, -0.045, 0.071], rotation: [0, 0, Math.PI / 2], tint: 0xb6c4cb }
+    ])
+  }
+  if (part === 'torso') {
+    return layeredGeometry([
+      { geometry: new THREE.CylinderGeometry(0.205, 0.155, 0.52, 14), scale: [0.86, 1, 1.05] },
+      { geometry: roundedBox(0.29, 0.11, 0.49, 0.04), position: [-0.005, 0.205, 0], tint: 0xf0f4f6 },
+      { geometry: new THREE.BoxGeometry(0.06, 0.22, 0.11), position: [-0.185, 0.025, 0], tint: 0x8798a3 },
+      { geometry: roundedBox(0.22, 0.13, 0.34, 0.04), position: [0, -0.31, 0], tint: 0xd5e0e5 },
+      { geometry: roundedBox(0.3, 0.075, 0.32, 0.025), position: [0, -0.245, 0], tint: 0x8798a3 },
+      { geometry: new THREE.BoxGeometry(0.026, 0.28, 0.026), position: [0.193, 0.035, 0], tint: 0x8798a3 },
+      { geometry: new THREE.BoxGeometry(0.024, 0.18, 0.022), position: [0.191, 0.055, -0.105], tint: 0xc2cdd3 },
+      { geometry: new THREE.BoxGeometry(0.024, 0.18, 0.022), position: [0.191, 0.055, 0.105], tint: 0xc2cdd3 },
+      { geometry: new THREE.BoxGeometry(0.075, 0.13, 0.1), position: [0.145, -0.135, -0.165], tint: 0xa9b7bf },
+      { geometry: new THREE.BoxGeometry(0.075, 0.13, 0.1), position: [0.145, -0.135, 0.165], tint: 0xa9b7bf }
+    ])
+  }
+  if (part.endsWith('UpperArm')) {
+    return layeredGeometry([
+      { geometry: new THREE.CapsuleGeometry(0.058, 0.174, 4, 9) },
+      { geometry: roundedBox(0.105, 0.07, 0.13, 0.025), position: [0, 0.14, 0], tint: 0xe9eef1 },
+      { geometry: new THREE.CylinderGeometry(0.064, 0.064, 0.03, 10), position: [0, -0.135, 0], tint: 0xaebfc8 }
+    ])
+  }
+  if (part.endsWith('Forearm')) {
+    return layeredGeometry([
+      { geometry: new THREE.CapsuleGeometry(0.052, 0.146, 4, 9), scale: [1.08, 1, 1.08] },
+      { geometry: new THREE.BoxGeometry(0.05, 0.11, 0.095), position: [0.047, -0.035, 0], tint: 0xd5e0e5 },
+      { geometry: new THREE.CylinderGeometry(0.06, 0.055, 0.035, 10), position: [0, -0.125, 0], tint: 0x9fb2bc }
+    ])
+  }
+  if (part.endsWith('Thigh')) {
+    return layeredGeometry([
+      { geometry: new THREE.CapsuleGeometry(0.078, 0.224, 4, 9), scale: [1.03, 1, 1.05] },
+      { geometry: roundedBox(0.05, 0.105, 0.105, 0.018), position: [0.068, -0.135, 0], tint: 0xa9b7bf }
+    ])
+  }
+  return layeredGeometry([
+    { geometry: new THREE.CapsuleGeometry(0.068, 0.214, 4, 9), scale: [1.04, 1, 1.04] },
+    { geometry: new THREE.CylinderGeometry(0.076, 0.076, 0.032, 10), position: [0, 0.15, 0], tint: 0xafbec6 },
+    { geometry: new THREE.BoxGeometry(0.045, 0.1, 0.115), position: [0.064, 0.1, 0], tint: 0xb7c4cb },
+    { geometry: new THREE.CylinderGeometry(0.07, 0.062, 0.045, 10), position: [0, -0.15, 0], tint: 0x9bafb9 }
+  ])
 }
 
 export class PersonRenderer {
@@ -99,9 +234,10 @@ export class PersonRenderer {
     this.members = entities.filter((entity) => entity.kind === 'person')
     for (const part of partOrder) {
       const material = part === 'gasDetectorScreen'
-        ? new THREE.MeshBasicMaterial({ color: 0xffffff })
-        : new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.68, metalness: 0 })
+        ? new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true })
+        : new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, metalness: 0.02, vertexColors: true })
       const mesh = new THREE.InstancedMesh(geometryFor(part), material, Math.max(1, this.members.length))
+      mesh.name = `person-${part}`
       mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, this.members.length) * 3), 3)
       mesh.castShadow = true
       mesh.frustumCulled = false
@@ -133,16 +269,18 @@ export class PersonRenderer {
       const suit = this.selected === entity.index
         ? this.color.setHex(baseSuit).lerp(new THREE.Color(0xffffff), 0.28).getHex()
         : baseSuit
-      const torsoLean = treating ? -0.18 : manualValve ? -0.1 : fast ? -0.12 : 0
+      const postureSway = fallen || treating ? 0 : gait * 0.028
+      const torsoLean = (treating ? -0.18 : manualValve ? -0.1 : fast ? -0.12 : 0) + postureSway
       this.place('torso', index, pose.x, baseY, pose.z, treating ? 0.08 : 0, 0.98, 0, torsoLean, this.rootRotation, suit)
       // The head mesh is the cleanroom hood; no exposed hair or skin is
       // rendered. The front pane represents the mask/face shield.
-      this.place('head', index, pose.x, baseY, pose.z, treating ? 0.13 : 0, 1.48, 0, treating ? -0.12 : 0, this.rootRotation, suit)
-      this.place('visor', index, pose.x, baseY, pose.z, treating ? 0.275 : 0.14, 1.49, 0, treating ? -0.12 : 0, this.rootRotation, entity.role === 'responder' ? 0x20313c : 0x5d7887)
+      const headLean = (treating ? -0.12 : 0) - postureSway * 0.45
+      this.place('head', index, pose.x, baseY, pose.z, treating ? 0.13 : 0, 1.48, 0, headLean, this.rootRotation, suit)
+      this.place('visor', index, pose.x, baseY, pose.z, treating ? 0.275 : 0.14, 1.49, 0, headLean, this.rootRotation, entity.role === 'responder' ? 0x20313c : 0x5d7887)
       const helmetColor = entity.role === 'responder' ? 0xf4f7f9 : 0xf0b833
-      this.scale.setScalar(entity.role === 'responder' ? 1 : 0)
-      this.place('hardhat', index, pose.x, baseY, pose.z, treating ? 0.145 : 0, 1.59, 0, treating ? -0.12 : 0, this.rootRotation, helmetColor)
-      this.place('hardhatBrim', index, pose.x, baseY, pose.z, treating ? 0.17 : 0.025, 1.61, 0, treating ? -0.12 : 0, this.rootRotation, helmetColor)
+      this.scale.setScalar(entity.role === 'operator' ? 0 : 1)
+      this.place('hardhat', index, pose.x, baseY, pose.z, treating ? 0.145 : 0, 1.54, 0, treating ? -0.12 : 0, this.rootRotation, helmetColor)
+      this.place('hardhatBrim', index, pose.x, baseY, pose.z, treating ? 0.17 : 0.025, 1.545, 0, treating ? -0.12 : 0, this.rootRotation, helmetColor)
       this.scale.set(1, 1, 1)
 
       const gesture = THREE.MathUtils.smoothstep(pose.auxA, 0, 1)
@@ -218,8 +356,8 @@ export class PersonRenderer {
         rightUpperArm, rightForearm, 'rightUpperArm', 'rightForearm', this.rootRotation, suit
       )
       const gloveColor = entity.role === 'responder' ? 0x263746 : 0xb8e4ec
-      this.place('leftHand', index, pose.x, baseY, pose.z, leftHand[0], leftHand[1], leftHand[2], 0, this.rootRotation, gloveColor)
-      this.place('rightHand', index, pose.x, baseY, pose.z, rightHand[0], rightHand[1], rightHand[2], 0, this.rootRotation, gloveColor)
+      this.place('leftHand', index, pose.x, baseY, pose.z, leftHand[0], leftHand[1], leftHand[2], leftForearm, this.rootRotation, gloveColor)
+      this.place('rightHand', index, pose.x, baseY, pose.z, rightHand[0], rightHand[1], rightHand[2], rightForearm, this.rootRotation, gloveColor)
       const leftFoot = this.placeTwoSegmentLimb(
         index, pose.x, baseY, pose.z, -0.12, 0.78, 0.38, 0.35,
         leftThigh, leftShin, 'leftThigh', 'leftShin', this.rootRotation, suit

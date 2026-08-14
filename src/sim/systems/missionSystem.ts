@@ -15,6 +15,10 @@ function createMission(world: SimWorld): void {
   const sequence = world.missionSequence++
   const from = equipmentPoint(world, sequence * 19)
   const stocker = world.layout.layout.stockers[sequence % world.layout.layout.stockers.length]!
+  // A stocker mission ends at its facility-facing dock, not at the middle of
+  // the rendered cabinet. The previous centre goal only looked successful
+  // because ground vehicles were allowed to overlap static geometry.
+  const stockerDockX = stocker.position[0] - Math.sign(stocker.position[0] || 1) * 3.1
   const mission: TransportMissionRuntime = {
     id: `transport-${String(sequence).padStart(4, '0')}`,
     carrierId: `carrier-${String(sequence).padStart(4, '0')}`,
@@ -22,7 +26,7 @@ function createMission(world: SimWorld): void {
     toId: stocker.id,
     fromX: from.x,
     fromZ: from.z,
-    toX: stocker.position[0],
+    toX: stockerDockX,
     toZ: stocker.position[2],
     state: 'queued',
     createdAt: world.simTime,

@@ -10,8 +10,7 @@ function medicalRendezvousTask(world: SimWorld, person: SimEntity) {
       !['observing', 'interacting'].includes(task.status) ||
       task.robotId === undefined
     ) return false
-    const robot = world.entities.find((entity) => entity.id === task.robotId)
-    return robot !== undefined && Math.hypot(robot.x - person.x, robot.z - person.z) <= 2.2
+    return world.entities.some((entity) => entity.id === task.robotId)
   })
 }
 
@@ -194,7 +193,7 @@ function updateGasSpotter(world: SimWorld, person: SimEntity): boolean {
   person.status = 'working'
   person.animation = task.gasSpotterAcknowledged ? 8 : 4
   person.auxA = task.status === 'interacting'
-    ? Math.min(1, Math.max(0, (world.simTime - task.stageStartedAt) / 6.2))
+    ? Math.min(1, Math.max(0, (world.simTime - task.stageStartedAt) / 8.2))
     : Math.min(1, Math.max(0, (world.simTime - task.gasSpotterArrivedAt) / 0.8))
   return true
 }
@@ -228,6 +227,25 @@ export function updatePeople(world: SimWorld): void {
     }
     const rendezvousTask = medicalRendezvousTask(world, person)
     if (rendezvousTask) {
+      const robot = rendezvousTask.robotId
+        ? world.entities.find((entity) => entity.id === rendezvousTask.robotId)
+        : undefined
+      if (robot && Math.hypot(robot.x - person.x, robot.z - person.z) > 2.05) {
+        const rendezvousX = world.medicalResponse?.kitRendezvousX ?? rendezvousTask.targetX
+        const rendezvousZ = world.medicalResponse?.kitRendezvousZ ?? rendezvousTask.targetZ
+        person.goalX = rendezvousX
+        person.goalZ = rendezvousZ
+        person.route = []
+        person.routeCursor = 0
+        // This is a short, line-of-sight handoff adjustment inside the
+        // already-cleared treatment perimeter. Keep the direct target stable
+        // even if the response coordinator refreshes its role pose.
+        person.targetX = rendezvousX
+        person.targetZ = rendezvousZ
+        person.personActivity = 'medicalApproach'
+        person.animation = 2
+        continue
+      }
       person.personActivity = rendezvousTask.status === 'interacting' ? 'receivingKit' : 'acknowledgingRobot'
       person.speed = 0
       person.status = 'working'
@@ -248,10 +266,17 @@ export function updatePeople(world: SimWorld): void {
       person.interactionUntil = undefined
       person.auxA = 0
       person.personActivity = 'responding'
+      const medicalHazard = world.emergency.kind === 'medical' ? world.emergency.hazard : undefined
+      const responderIndex = world.medicalResponse?.responderIds.indexOf(person.id) ?? -1
+      if (medicalHazard && responderIndex >= 0) {
+        const side = responderIndex === 0 ? -1 : 1
+        person.goalX = medicalHazard.sourceX + side * 1.05
+        person.goalZ = medicalHazard.sourceZ + (responderIndex === 0 ? 0.35 : -0.35)
+      }
       person.route = []
       person.routeCursor = 0
-      person.targetX = Number.NaN
-      person.targetZ = Number.NaN
+      person.targetX = medicalHazard ? person.goalX : Number.NaN
+      person.targetZ = medicalHazard ? person.goalZ : Number.NaN
     }
     if (person.behavior === 'evacuate') {
       if (world.simTime < (person.reactionUntil ?? world.simTime)) {

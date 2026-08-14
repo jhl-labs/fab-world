@@ -1,6 +1,14 @@
 import { pointInPolygon, type Vec2 } from '../math/vec'
 import { FabLayoutSchema, type FabLayout } from '../schema'
 import { NavGraph } from './graph'
+import {
+  buildGroundObstacles,
+  circleIntersectsObstacle,
+  equipmentAccessPoint,
+  GroundObstacleIndex,
+  sweptCircleIntersectsObstacle,
+  type GroundObstacle
+} from './obstacles'
 
 export interface DerivedLayout {
   layout: FabLayout
@@ -9,6 +17,8 @@ export interface DerivedLayout {
   walkGraph: NavGraph
   bayCenters: Map<string, readonly [number, number]>
   equipmentPositions: Map<string, readonly [number, number, number]>
+  groundObstacles: GroundObstacle[]
+  groundObstacleIndex: GroundObstacleIndex
   zoneAt(x: number, z: number): string | undefined
 }
 
@@ -23,7 +33,21 @@ function connect(graph: NavGraph, a: number, b: number): void {
   graph.addEdge(a, b, graph.nodes[a]!.zoneId ?? graph.nodes[b]!.zoneId)
 }
 
-function buildGroundGraph(layout: FabLayout, includeBays: boolean): NavGraph {
+function groundPathIsClear(
+  obstacles: GroundObstacleIndex,
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  bodyRadius: number
+): boolean {
+  return obstacles.alongSegment(fromX, fromZ, toX, toZ, bodyRadius).every((obstacle) =>
+    !circleIntersectsObstacle(toX, toZ, bodyRadius, obstacle) &&
+    !sweptCircleIntersectsObstacle(fromX, fromZ, toX, toZ, bodyRadius, obstacle)
+  )
+}
+
+function buildGroundGraph(layout: FabLayout, bodyRadius: number, obstacles: GroundObstacleIndex): NavGraph {
   const graph = new NavGraph()
   const xEdges: number[] = []; const zEdges: number[] = []
   let x = -layout.grid.columnWidths.reduce((sum, value) => sum + value, 0) / 2 - layout.grid.aisleWidth * (layout.grid.cols - 1) / 2
@@ -32,14 +56,55 @@ function buildGroundGraph(layout: FabLayout, includeBays: boolean): NavGraph {
   for (const depth of layout.grid.rowDepths) { zEdges.push(z, z + depth); z += depth + layout.grid.aisleWidth }
   const xs = uniqueSorted([...xEdges, ...layout.emergency.exits.map((exit) => exit.position[0]), ...layout.emergency.musterPoints.map((point) => point.position[0]), ...layout.emergency.safetyDevices.map((device) => device.position[0]), layout.emergency.medicalStation.position[0]])
   const zs = uniqueSorted([...zEdges, ...layout.emergency.exits.map((exit) => exit.position[2]), ...layout.emergency.musterPoints.map((point) => point.position[2]), ...layout.emergency.safetyDevices.map((device) => device.position[2]), layout.emergency.medicalStation.position[2]])
-  for (const currentX of xs) for (const currentZ of zs) addGraphPoint(graph, currentX, currentZ, layoutZoneAt(layout, currentX, currentZ))
-  for (const currentX of xs) for (let i = 1; i < zs.length; i++) connect(graph, graph.indexOf(nodeId(currentX, zs[i - 1]!))!, graph.indexOf(nodeId(currentX, zs[i]!))!)
-  for (const currentZ of zs) for (let i = 1; i < xs.length; i++) connect(graph, graph.indexOf(nodeId(xs[i - 1]!, currentZ))!, graph.indexOf(nodeId(xs[i]!, currentZ))!)
-  if (includeBays) for (const bay of layout.bays) {
+  for (const currentX of xs) for (const currentZ of zs) {
+    const occupied = obstacles.aroundPoint(currentX, currentZ, bodyRadius)
+      .some((obstacle) => circleIntersectsObstacle(currentX, currentZ, bodyRadius, obstacle))
+    if (!occupied) addGraphPoint(graph, currentX, currentZ, layoutZoneAt(layout, currentX, currentZ))
+  }
+  for (const currentX of xs) for (let i = 1; i < zs.length; i++) {
+    const a = graph.indexOf(nodeId(currentX, zs[i - 1]!))
+    const b = graph.indexOf(nodeId(currentX, zs[i]!))
+    if (
+      a !== undefined &&
+      b !== undefined &&
+      groundPathIsClear(obstacles, currentX, zs[i - 1]!, currentX, zs[i]!, bodyRadius)
+    ) connect(graph, a, b)
+  }
+  for (const currentZ of zs) for (let i = 1; i < xs.length; i++) {
+    const a = graph.indexOf(nodeId(xs[i - 1]!, currentZ))
+    const b = graph.indexOf(nodeId(xs[i]!, currentZ))
+    if (
+      a !== undefined &&
+      b !== undefined &&
+      groundPathIsClear(obstacles, xs[i - 1]!, currentZ, xs[i]!, currentZ, bodyRadius)
+    ) connect(graph, a, b)
+  }
+  const baseNodeCount = graph.nodes.length
+  const addAccessLeaf = (accessX: number, accessZ: number, zoneId?: string): void => {
+    if (obstacles.aroundPoint(accessX, accessZ, bodyRadius)
+      .some((obstacle) => circleIntersectsObstacle(accessX, accessZ, bodyRadius, obstacle))) return
+    const nearest = graph.nodes
+      .slice(0, baseNodeCount)
+      .map((node, index) => ({
+        index,
+        distance: (node.x - accessX) ** 2 + (node.z - accessZ) ** 2,
+        clear: groundPathIsClear(obstacles, node.x, node.z, accessX, accessZ, bodyRadius)
+      }))
+      .filter((candidate) => candidate.clear)
+      .sort((left, right) => left.distance - right.distance || left.index - right.index)[0]
+    if (!nearest) return
+    const point = addGraphPoint(graph, accessX, accessZ, zoneId)
+    connect(graph, point, nearest.index)
+  }
+  for (const bay of layout.bays) {
     const equipment = bay.equipment[0]!
-    const nearest = graph.nearest(equipment.position[0], equipment.position[2])
-    const point = addGraphPoint(graph, equipment.position[0], equipment.position[2], `zone-${bay.id}`)
-    connect(graph, point, nearest)
+    const access = equipmentAccessPoint(equipment, bodyRadius > 0.4 ? 0.55 : 0)
+    addAccessLeaf(access[0], access[1], `zone-${bay.id}`)
+  }
+  for (const device of layout.emergency.safetyDevices) {
+    const accessX = device.position[0] - Math.cos(device.heading) * 0.75
+    const accessZ = device.position[2] - Math.sin(device.heading) * 0.75
+    addAccessLeaf(accessX, accessZ, layoutZoneAt(layout, accessX, accessZ))
   }
   return graph
 }
@@ -91,10 +156,23 @@ export function deriveLayout(input: unknown): DerivedLayout {
     for (const zone of layout.zones) if (pointInPolygon([pointX, pointZ], zone.polygon as Vec2[])) return zone.id
     return undefined
   }
-  const derived = { layout, railGraph: buildRailGraph(layout), roadGraph: buildGroundGraph(layout, true), walkGraph: buildGroundGraph(layout, true), bayCenters, equipmentPositions, zoneAt }
+  const groundObstacles = buildGroundObstacles(layout)
+  const groundObstacleIndex = new GroundObstacleIndex(groundObstacles)
+  const derived = {
+    layout,
+    railGraph: buildRailGraph(layout),
+    roadGraph: buildGroundGraph(layout, 0.64, groundObstacleIndex),
+    walkGraph: buildGroundGraph(layout, 0.28, groundObstacleIndex),
+    bayCenters,
+    equipmentPositions,
+    groundObstacles,
+    groundObstacleIndex,
+    zoneAt
+  }
   assertSemanticValidity(derived)
   return derived
 }
 
 export { NavGraph } from './graph'
 export type { HazardLevel } from './graph'
+export * from './obstacles'

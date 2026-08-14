@@ -40,6 +40,8 @@ export function Hud(props: HudProps): ReactElement {
   const metrics = state.metrics
   const comparison = metrics?.riskComparison
   const comparisonActive = comparison?.active === true
+  const comparisonComplete = comparisonActive && comparison?.stage === 'complete'
+  const comparisonRunning = comparisonActive && !comparisonComplete
   const humanRun = comparison?.human
   const humanoidRun = comparison?.humanoid
   const currentIsHuman = comparison?.currentMode === 'human' && !humanRun
@@ -225,13 +227,14 @@ export function Hud(props: HudProps): ReactElement {
   return <div className="hud">
     <header className="topbar">
       <div><p className="eyebrow">FABWORLD / HUMANOID OPERATIONS</p><h1>Semiconductor Fab</h1></div>
-      <div className={`rmf-state rmf-${state.rmfState}`}><span />OPEN-RMF · {state.rmfState === 'connected' ? 'LIVE' : state.rmfState === 'demo' ? 'DEMO' : state.rmfState.toUpperCase()}</div>
-      <div className={`phase phase-${state.phase}`}><span className="pulse" />{state.emergencyKind ? kindLabel[state.emergencyKind] : 'FAB ONLINE'} · {phaseLabel[state.phase]}</div>
+      <div className={`rmf-state rmf-${state.rmfState}`} role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true" />OPEN-RMF · {state.rmfState === 'connected' ? 'LIVE' : state.rmfState === 'demo' ? 'DEMO' : state.rmfState.toUpperCase()}</div>
+      <div className={`phase phase-${state.phase}`} role="status" aria-live="assertive" aria-atomic="true"><span className="pulse" aria-hidden="true" />{state.emergencyKind ? kindLabel[state.emergencyKind] : 'FAB ONLINE'} · {phaseLabel[state.phase]}</div>
       <div className="stats" data-draw-calls={state.stats?.drawCalls ?? 0} data-tick-ms={state.metrics?.tickMs ?? 0}><span>{state.stats?.fps ?? '—'} FPS</span><span>{state.stats?.drawCalls ?? '—'} DRAW</span><span>{state.metrics?.entityCount ?? 0} ENT</span></div>
     </header>
 
     <section
       className="scoreboard"
+      aria-label="운영 현황"
       data-evacuated={state.metrics?.evacuated ?? 0}
       data-total-evacuees={state.metrics?.totalEvacuees ?? 0}
       data-emergency-elapsed={state.metrics?.emergencyElapsed ?? 0}
@@ -247,35 +250,40 @@ export function Hud(props: HudProps): ReactElement {
       <div><small>팹 처리</small><b>{state.metrics?.completedProcesses ?? 0}<i> lot</i></b></div>
     </section>
 
-    <aside className="panel controls">
+    <aside className="panel controls" aria-label="시뮬레이션과 카메라 제어">
       <p className="panel-title">시간 제어</p>
-      <div className="time-row"><button className={state.timeScale === 0 ? 'active' : ''} onClick={() => updateScale(state.timeScale === 0 ? 1 : 0)}>{state.timeScale === 0 ? '▶ 재생' : 'Ⅱ 정지'}</button><button onClick={props.onStep}>+1 tick</button></div>
-      <div className="scale-row">{scales.map((scale) => <button key={scale} className={state.timeScale === scale ? 'active' : ''} onClick={() => updateScale(scale)}>{scale}×</button>)}</div>
+      <div className="time-row"><button aria-pressed={state.timeScale === 0} className={state.timeScale === 0 ? 'active' : ''} onClick={() => updateScale(state.timeScale === 0 ? 1 : 0)}>{state.timeScale === 0 ? '▶ 재생' : 'Ⅱ 정지'}</button><button onClick={props.onStep}>+1 tick</button></div>
+      <div className="scale-row">{scales.map((scale) => <button key={scale} aria-pressed={state.timeScale === scale} className={state.timeScale === scale ? 'active' : ''} onClick={() => updateScale(scale)}>{scale}×</button>)}</div>
       <p className="sim-clock">SIM {Math.floor(state.metrics?.simTime ?? 0).toString().padStart(4, '0')}s</p>
       <p className="panel-title second">카메라</p>
-      <div className="camera-row">{(['orbit', 'follow', 'firstPerson'] as CameraMode[]).map((mode) => <button key={mode} className={state.cameraMode === mode ? 'active' : ''} onClick={() => { state.setCameraMode(mode); props.onCamera(mode) }}>{mode === 'orbit' ? 'Orbit' : mode === 'follow' ? 'Follow' : '1인칭'}</button>)}</div>
+      <div className="camera-row">{(['orbit', 'follow', 'firstPerson'] as CameraMode[]).map((mode) => <button key={mode} aria-pressed={state.cameraMode === mode} className={state.cameraMode === mode ? 'active' : ''} onClick={() => { state.setCameraMode(mode); props.onCamera(mode) }}>{mode === 'orbit' ? 'Orbit' : mode === 'follow' ? 'Follow' : '1인칭'}</button>)}</div>
     </aside>
 
-    <aside className={`panel mission-panel ${comparisonActive ? 'comparison-active' : ''}`}>
+    <aside className={`panel mission-panel ${comparisonActive ? 'comparison-active' : ''}`} aria-label="휴머노이드 임무 제어와 안전 증거">
       <p className="panel-title">휴머노이드 목적 기반 데모</p>
       <button className="showcase-button" disabled={!rmfDispatchReady} onClick={props.onShowcase}><strong>▶ 통합 시연 시작</strong><small>{rmfDispatchReady ? '설비 점검 → 이상 감지 → RMF 재배정 → 가스 격리' : 'Open-RMF preflight 통과 후 시작할 수 있습니다.'}</small></button>
       <button
         className="comparison-button"
-        disabled={state.rmfState !== 'demo' || comparisonActive}
+        disabled={state.rmfState !== 'demo' || comparisonRunning}
         onClick={props.onRiskComparison}
       >
-        <strong>{comparisonActive ? '● A/B 실측 진행 중' : '▶ 위험작업 A/B 실측'}</strong>
+        <strong>{comparisonComplete ? '↻ A/B 실측 완료 · 다시 실행' : comparisonRunning ? '● A/B 실측 진행 중' : '▶ 위험작업 A/B 실측'}</strong>
         <small>{state.rmfState === 'demo'
-          ? '동일 사고: 방재요원 직접 조작 → 초기화 → 휴머노이드 투입'
+          ? comparisonComplete
+            ? '검증 결과를 유지한 채 동일 조건 비교를 다시 시작할 수 있습니다.'
+            : '동일 사고: 방재요원 직접 조작 → 초기화 → 휴머노이드 투입'
           : '동일 초기상태 비교는 LOCAL DEMO에서 실행합니다.'}</small>
       </button>
-      <div className={`rmf-preflight preflight-${preflight.state}`} data-preflight={preflight.state}>
+      <div className={`rmf-preflight preflight-${preflight.state}`} data-preflight={preflight.state} role="status" aria-live="polite" aria-atomic="true">
         <span>RMF PREFLIGHT</span><b>{preflight.label}</b>
         <small className="rmf-detail" title={preflight.detail}>{preflight.detail}</small>
       </div>
       <p className="capability-note">사람용 환경 그대로 · 보행 이동 · 계기 관찰 · 수동 밸브 조작</p>
       <div
         className="purpose-callout"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
         data-task-kind={comparisonActive ? 'risk_comparison' : activeTask?.kind ?? 'none'}
         data-task-status={comparisonActive ? comparison?.stage : activeTask?.status ?? 'idle'}
       >
@@ -301,7 +309,7 @@ export function Hud(props: HudProps): ReactElement {
           <b>{comparison?.stage === 'complete' ? 'VERIFIED' : 'RUNNING'}</b>
         </div>
         <small className="comparison-contract">
-          seed 20260729 · {humanRun?.targetId ?? comparison?.currentTargetId ?? '동일 밸브'} · 조작/검증 6.2s
+          seed 20260729 · {humanRun?.targetId ?? comparison?.currentTargetId ?? '동일 밸브'} · 조작/검증 8.2s
         </small>
         <div className="comparison-grid">
           <article className={`${humanRun?.verified ? 'complete' : currentIsHuman ? 'current' : ''}`}>
@@ -409,13 +417,13 @@ export function Hud(props: HudProps): ReactElement {
       </div>
     </aside>
 
-    <aside className="panel scenarios">
+    <aside className="panel scenarios" aria-label="비상 시나리오 실행">
       <p className="panel-title">비상 상황 단독 시연</p>
       {props.scenarios.map((scenario) => <button className="scenario-button" key={scenario.id} onClick={() => props.onScenario(scenario)}><span>{kindLabel[scenario.kind]}</span><small>{scenario.name}</small></button>)}
       <div className="quick-actions"><button onClick={() => props.onEmergency('gasLeak')}>즉시 가스</button><button onClick={() => props.onEmergency('fire')}>즉시 화재</button><button onClick={() => props.onEmergency('medical')}>즉시 응급</button></div>
     </aside>
 
-    <aside className="panel entity-panel">
+    <aside className="panel entity-panel" aria-label="Open-RMF 플릿과 개체 추적">
       <p className="panel-title">Open-RMF 휴머노이드 플릿</p>
       <div className="fleet-board">
         {(state.metrics?.humanoids ?? []).map((robot) => {
@@ -442,6 +450,7 @@ export function Hud(props: HudProps): ReactElement {
             data-task-id={robot.taskId ?? ''}
             data-authority={authority}
             data-activity={robot.activity}
+            aria-pressed={robot.id === selected?.id}
             onClick={() => { state.select(robot.id); props.onSelect(entity) }}
           >
             <span><strong>{callsign}</strong><em>{authorityLabel}</em></span>
@@ -451,9 +460,9 @@ export function Hud(props: HudProps): ReactElement {
         })}
       </div>
       <p className="panel-title entity-list-title">개체 추적</p>
-      <div className="entity-list">{entities.map((entity) => <button key={entity.id} className={entity.id === selected?.id ? 'active' : ''} onClick={() => { state.select(entity.id); props.onSelect(entity) }}><span className={`entity-dot ${entity.kind}`} />{entity.name}<small>{entity.id}</small></button>)}</div>
+      <div className="entity-list">{entities.map((entity) => <button key={entity.id} aria-pressed={entity.id === selected?.id} className={entity.id === selected?.id ? 'active' : ''} onClick={() => { state.select(entity.id); props.onSelect(entity) }}><span className={`entity-dot ${entity.kind}`} aria-hidden="true" />{entity.name}<small>{entity.id}</small></button>)}</div>
     </aside>
-    <section className={`log-feed ${state.phase === 'allClear' ? 'log-feed-compact' : ''}`}>
+    <section className={`log-feed ${state.phase === 'allClear' ? 'log-feed-compact' : ''}`} role="log" aria-label="운영 이벤트" aria-live="polite" aria-relevant="additions text">
       {state.logs.slice(0, state.phase === 'allClear' ? 2 : 8).map((item) =>
         <div key={item.id} className={`log-${item.severity}`}>{item.message}</div>
       )}

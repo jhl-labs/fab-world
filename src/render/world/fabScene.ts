@@ -1,11 +1,13 @@
 import * as THREE from 'three'
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
   GAS_VALVE_WHEEL_HEIGHT,
   GAS_VALVE_WHEEL_OFFSET,
   GAS_VALVE_WHEEL_RING_RADIUS,
   GAS_VALVE_WHEEL_TUBE_RADIUS
 } from '../../core/interactionGeometry'
+import { EQUIPMENT_DIMENSIONS } from '../../core/layout'
 import type { EquipmentType, FabLayout, ProcessBand } from '../../core/schema'
 
 const bandColors: Record<ProcessBand, number> = {
@@ -13,16 +15,16 @@ const bandColors: Record<ProcessBand, number> = {
 }
 
 const equipmentProfiles: Record<EquipmentType, { width: number; height: number; depth: number; accent: number; crown: number; ports: number }> = {
-  lithography: { width: 4.6, height: 3.2, depth: 4.2, accent: 0xf3c84b, crown: 0.58, ports: 2 },
-  etcher: { width: 3.5, height: 2.75, depth: 4.2, accent: 0x2eb8b0, crown: 0.42, ports: 1 },
-  cvd: { width: 3.5, height: 2.85, depth: 4.2, accent: 0x638ce8, crown: 0.62, ports: 1 },
-  pvd: { width: 3.5, height: 2.85, depth: 4.2, accent: 0x78a0ef, crown: 0.56, ports: 1 },
-  cmp: { width: 5, height: 2.35, depth: 4.2, accent: 0x75ba79, crown: 0.35, ports: 2 },
-  implanter: { width: 3.5, height: 2.85, depth: 4.2, accent: 0xb082ef, crown: 0.7, ports: 1 },
-  cleaner: { width: 3.5, height: 2.45, depth: 4.2, accent: 0x5fc5ca, crown: 0.32, ports: 1 },
-  furnace: { width: 3.5, height: 3.65, depth: 4.2, accent: 0xdb8c4a, crown: 0.82, ports: 1 },
-  metrology: { width: 3.5, height: 2.35, depth: 4.2, accent: 0x5d9fd7, crown: 0.3, ports: 1 },
-  stocker: { width: 4.2, height: 5.8, depth: 2.4, accent: 0x7692af, crown: 0.2, ports: 1 }
+  lithography: { ...EQUIPMENT_DIMENSIONS.lithography, accent: 0xf3c84b, crown: 0.58, ports: 2 },
+  etcher: { ...EQUIPMENT_DIMENSIONS.etcher, accent: 0x2eb8b0, crown: 0.42, ports: 1 },
+  cvd: { ...EQUIPMENT_DIMENSIONS.cvd, accent: 0x638ce8, crown: 0.62, ports: 1 },
+  pvd: { ...EQUIPMENT_DIMENSIONS.pvd, accent: 0x78a0ef, crown: 0.56, ports: 1 },
+  cmp: { ...EQUIPMENT_DIMENSIONS.cmp, accent: 0x75ba79, crown: 0.35, ports: 2 },
+  implanter: { ...EQUIPMENT_DIMENSIONS.implanter, accent: 0xb082ef, crown: 0.7, ports: 1 },
+  cleaner: { ...EQUIPMENT_DIMENSIONS.cleaner, accent: 0x5fc5ca, crown: 0.32, ports: 1 },
+  furnace: { ...EQUIPMENT_DIMENSIONS.furnace, accent: 0xdb8c4a, crown: 0.82, ports: 1 },
+  metrology: { ...EQUIPMENT_DIMENSIONS.metrology, accent: 0x5d9fd7, crown: 0.3, ports: 1 },
+  stocker: { ...EQUIPMENT_DIMENSIONS.stocker, accent: 0x7692af, crown: 0.2, ports: 1 }
 }
 
 const materials = {
@@ -44,6 +46,7 @@ const materials = {
 const accentMaterials = new Map<number, THREE.MeshStandardMaterial>()
 const processFloorMaterials = new Map<number, THREE.MeshBasicMaterial>()
 const processLineMaterials = new Map<number, THREE.MeshBasicMaterial>()
+const roundedGeometryCache = new Map<string, THREE.BufferGeometry>()
 
 function accentMaterial(color: number): THREE.MeshStandardMaterial {
   let material = accentMaterials.get(color)
@@ -71,6 +74,61 @@ function addBox(parent: THREE.Object3D, size: readonly [number, number, number],
   mesh.position.set(...position)
   mesh.receiveShadow = true
   mesh.castShadow = true
+  if (name) mesh.name = name
+  parent.add(mesh)
+  return mesh
+}
+
+function addRoundedBox(parent: THREE.Object3D, size: readonly [number, number, number], position: readonly [number, number, number], radius: number, material: THREE.Material, name?: string): THREE.Mesh {
+  // RoundedBoxGeometry is non-indexed by default. Re-indexing each reusable
+  // static part cuts its vertex payload by roughly 70% and lets the final
+  // material batches stay indexed instead of expanding every ordinary box.
+  const cacheKey = `${size[0]}:${size[1]}:${size[2]}:${radius}`
+  let geometry = roundedGeometryCache.get(cacheKey)
+  if (!geometry) {
+    const source = new RoundedBoxGeometry(size[0], size[1], size[2], 1, radius)
+    geometry = mergeVertices(source)
+    source.dispose()
+    roundedGeometryCache.set(cacheKey, geometry)
+  }
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.position.set(...position)
+  mesh.receiveShadow = true
+  mesh.castShadow = true
+  if (name) mesh.name = name
+  parent.add(mesh)
+  return mesh
+}
+
+interface GeometryPart {
+  geometry: THREE.BufferGeometry
+  position?: readonly [number, number, number]
+  rotation?: readonly [number, number, number]
+}
+
+function mergeGeometryParts(parts: GeometryPart[]): THREE.BufferGeometry {
+  const geometries = parts.map((part) => {
+    const geometry = part.geometry
+    if (part.rotation) geometry.rotateX(part.rotation[0]).rotateY(part.rotation[1]).rotateZ(part.rotation[2])
+    if (part.position) geometry.translate(...part.position)
+    if (!geometry.index) return geometry
+    const normalized = geometry.toNonIndexed()
+    geometry.dispose()
+    return normalized
+  })
+  const merged = mergeGeometries(geometries, false)
+  geometries.forEach((geometry) => geometry.dispose())
+  if (!merged) throw new Error('Failed to merge fab detail geometry')
+  return merged
+}
+
+function addCompound(parent: THREE.Object3D, parts: GeometryPart[], material: THREE.Material, name?: string): THREE.Mesh {
+  const source = mergeGeometryParts(parts)
+  const geometry = mergeVertices(source)
+  source.dispose()
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.castShadow = true
+  mesh.receiveShadow = true
   if (name) mesh.name = name
   parent.add(mesh)
   return mesh
@@ -161,15 +219,26 @@ function addProcessTool(group: THREE.Group, equipment: FabLayout['bays'][number]
   const accent = accentMaterial(profile.accent)
   // Anti-vibration plinth, chamfer-like stepped enclosure, and service gap.
   addBox(tool, [profile.width + 0.26, 0.18, profile.depth + 0.26], [0, 0.09, 0], materials.dark)
-  addBox(tool, [profile.width, 0.22, profile.depth], [0, 0.28, 0], materials.shellDark)
-  addBox(tool, [profile.width - 0.16, profile.height - 0.38, profile.depth - 0.16], [0, profile.height / 2 + 0.1, 0], materials.shell)
-  addBox(tool, [profile.width - 0.42, 0.13, profile.depth - 0.42], [0, profile.height + 0.05, 0], materials.frame)
+  addRoundedBox(tool, [profile.width, 0.22, profile.depth], [0, 0.28, 0], 0.07, materials.shellDark)
+  addRoundedBox(tool, [profile.width - 0.16, profile.height - 0.38, profile.depth - 0.16], [0, profile.height / 2 + 0.1, 0], 0.12, materials.shell)
+  addRoundedBox(tool, [profile.width - 0.42, 0.13, profile.depth - 0.42], [0, profile.height + 0.05, 0], 0.045, materials.frame)
   addBox(tool, [profile.width * 0.78, 0.055, 0.08], [0, profile.height * 0.67, profile.depth / 2 + 0.045], accent)
   // Readable front control column and dark service door.
-  addBox(tool, [0.58, profile.height * 0.58, 0.07], [profile.width * 0.34, profile.height * 0.48, profile.depth / 2 + 0.05], materials.shellDark)
-  addBox(tool, [0.38, 0.28, 0.025], [profile.width * 0.34, profile.height * 0.63, profile.depth / 2 + 0.095], materials.glass)
+  addRoundedBox(tool, [0.58, profile.height * 0.58, 0.07], [profile.width * 0.34, profile.height * 0.48, profile.depth / 2 + 0.05], 0.035, materials.shellDark)
+  addRoundedBox(tool, [0.38, 0.28, 0.025], [profile.width * 0.34, profile.height * 0.63, profile.depth / 2 + 0.095], 0.018, materials.glass)
   addBox(tool, [0.36, 0.035, 0.025], [profile.width * 0.34, profile.height * 0.83, profile.depth / 2 + 0.1], accent)
   addCylinder(tool, 0.045, 0.04, [profile.width * 0.34, profile.height * 0.43, profile.depth / 2 + 0.11], materials.status, 10).rotation.x = Math.PI / 2
+  // Panel seams and service ventilation make the enclosure read as a
+  // maintainable machine rather than one large block. They batch back into
+  // the existing frame/dark material draws with the rest of the static fab.
+  addCompound(tool, [profile.height * 0.28, profile.height * 0.5, profile.height * 0.72].map((y) => ({
+    geometry: new THREE.BoxGeometry(profile.width * 0.52, 0.018, 0.028),
+    position: [-profile.width * 0.13, y, profile.depth / 2 + 0.09] as const
+  })), materials.frame)
+  addCompound(tool, [profile.height * 0.34, profile.height * 0.43, profile.height * 0.52].map((y) => ({
+    geometry: new THREE.BoxGeometry(0.035, 0.045, profile.depth * 0.36),
+    position: [profile.width / 2 + 0.085, y, -profile.depth * 0.12] as const
+  })), materials.shellDark)
   const portSpacing = profile.ports === 2 ? profile.width * 0.22 : 0
   for (let index = 0; index < profile.ports; index++) addLoadport(tool, (index - (profile.ports - 1) / 2) * portSpacing, profile, accent, index)
   // Type-specific crown gives each tool a distinctive silhouette at aerial and close range.
@@ -180,8 +249,22 @@ function addProcessTool(group: THREE.Group, equipment: FabLayout['bays'][number]
     for (const x of [-0.48, 0, 0.48]) addCylinder(tool, 0.18, profile.crown, [x, profile.height + profile.crown / 2, -0.35], materials.shellDark, 12)
   } else if (equipment.type === 'cmp') {
     for (const x of [-profile.width * 0.22, profile.width * 0.22]) addCylinder(tool, 0.42, profile.crown, [x, profile.height + profile.crown / 2, -0.2], materials.shellDark, 16)
+  } else if (equipment.type === 'etcher' || equipment.type === 'cvd' || equipment.type === 'pvd') {
+    addRoundedBox(tool, [profile.width * 0.48, profile.crown, profile.depth * 0.44], [-profile.width * 0.12, profile.height + profile.crown / 2, -0.22], 0.08, materials.shellDark)
+    for (const x of [-profile.width * 0.22, profile.width * 0.04]) {
+      addCylinder(tool, 0.11, profile.crown * 0.5, [x, profile.height + profile.crown * 1.05, -0.22], materials.frame, 10)
+    }
+  } else if (equipment.type === 'implanter') {
+    addRoundedBox(tool, [profile.width * 0.7, profile.crown * 0.56, profile.depth * 0.28], [-profile.width * 0.06, profile.height + profile.crown * 0.28, -0.18], 0.07, materials.shellDark)
+    const beam = addCylinder(tool, 0.13, profile.width * 0.48, [-profile.width * 0.06, profile.height + profile.crown * 0.73, -0.18], materials.frame, 12)
+    beam.rotation.z = Math.PI / 2
+  } else if (equipment.type === 'cleaner') {
+    for (const x of [-profile.width * 0.23, 0, profile.width * 0.23]) {
+      addCylinder(tool, 0.16, profile.crown, [x, profile.height + profile.crown / 2, -0.22], materials.shellDark, 12)
+      addCylinder(tool, 0.1, 0.07, [x, profile.height + profile.crown + 0.035, -0.22], accent, 10)
+    }
   } else {
-    addBox(tool, [profile.width * 0.45, profile.crown, profile.depth * 0.42], [-profile.width * 0.12, profile.height + profile.crown / 2, -0.22], materials.shellDark)
+    addRoundedBox(tool, [profile.width * 0.45, profile.crown, profile.depth * 0.42], [-profile.width * 0.12, profile.height + profile.crown / 2, -0.22], 0.07, materials.shellDark)
   }
   addUtilityPack(tool, profile, accent)
   if (equipment.hazardCapable) addHazardMarker(tool, profile, band)
@@ -189,16 +272,16 @@ function addProcessTool(group: THREE.Group, equipment: FabLayout['bays'][number]
 
 function addLoadport(tool: THREE.Group, x: number, profile: { width: number; height: number; depth: number }, accent: THREE.Material, index: number): void {
   const port = new THREE.Group(); port.name = `loadport:${index}`; port.position.set(x, 0.57, profile.depth / 2 + 0.15); tool.add(port)
-  addBox(port, [0.78, 0.82, 0.28], [0, 0, 0], materials.dark)
-  addBox(port, [0.59, 0.49, 0.035], [0, 0.05, 0.16], materials.glass)
+  addRoundedBox(port, [0.78, 0.82, 0.28], [0, 0, 0], 0.055, materials.dark)
+  addRoundedBox(port, [0.59, 0.49, 0.035], [0, 0.05, 0.16], 0.025, materials.glass)
   addBox(port, [0.62, 0.045, 0.05], [0, 0.37, 0.18], accent)
-  addBox(port, [0.7, 0.1, 0.35], [0, -0.42, 0], materials.frame)
+  addRoundedBox(port, [0.7, 0.1, 0.35], [0, -0.42, 0], 0.028, materials.frame)
   for (const side of [-1, 1]) addCylinder(port, 0.028, 0.055, [side * 0.28, 0.24, 0.19], accent, 8).rotation.x = Math.PI / 2
 }
 
 function addUtilityPack(tool: THREE.Group, profile: { width: number; height: number; depth: number }, accent: THREE.Material): void {
   const x = -profile.width / 2 - 0.18
-  addBox(tool, [0.24, profile.height * 0.54, profile.depth * 0.48], [x, profile.height * 0.48, -profile.depth * 0.14], materials.shellDark)
+  addRoundedBox(tool, [0.24, profile.height * 0.54, profile.depth * 0.48], [x, profile.height * 0.48, -profile.depth * 0.14], 0.05, materials.shellDark)
   for (const z of [-0.48, 0, 0.48]) {
     const pipe = addCylinder(tool, 0.065, profile.height * 0.73, [x - 0.14, profile.height * 0.57, z], materials.frame, 10)
     pipe.rotation.z = Math.PI / 2
@@ -246,14 +329,30 @@ function addSafetyDevice(group: THREE.Group, device: FabLayout['emergency']['saf
   deviceGroup.position.set(device.position[0], 0, device.position[2]); deviceGroup.rotation.y = -device.heading; group.add(deviceGroup)
   const deviceColor = device.kind === 'gas-isolation-valve' ? 0xffb020 : 0xff3b30
   const accent = new THREE.MeshStandardMaterial({ color: deviceColor, emissive: deviceColor, emissiveIntensity: 0.45, roughness: 0.3, metalness: 0.6 })
-  addBox(deviceGroup, [0.42, 1.55, 0.82], [0, 0.78, 0], materials.shell)
-  addBox(deviceGroup, [0.32, 0.92, 0.035], [0.05, 0.82, 0.43], materials.dark)
-  addBox(deviceGroup, [0.18, 0.07, 0.04], [0.05, 1.23, 0.46], accent)
+  addCompound(deviceGroup, [
+    { geometry: new RoundedBoxGeometry(0.42, 1.43, 0.82, 1, 0.065), position: [0, 0.8, 0] },
+    { geometry: new RoundedBoxGeometry(0.54, 0.14, 0.94, 1, 0.04), position: [0, 1.49, 0] },
+    { geometry: new THREE.BoxGeometry(0.12, 0.18, 0.68), position: [-0.22, 0.12, 0] },
+    { geometry: new THREE.BoxGeometry(0.12, 0.18, 0.68), position: [0.22, 0.12, 0] }
+  ], materials.shell, `safety-cabinet:${device.id}`)
+  addCompound(deviceGroup, [
+    { geometry: new RoundedBoxGeometry(0.32, 0.92, 0.035, 1, 0.025), position: [0.05, 0.82, 0.43] },
+    ...[0.57, 0.67, 0.77].map((y): GeometryPart => ({ geometry: new THREE.BoxGeometry(0.21, 0.025, 0.025), position: [0.05, y, 0.46] }))
+  ], materials.dark)
+  addCompound(deviceGroup, [
+    { geometry: new RoundedBoxGeometry(0.18, 0.07, 0.04, 1, 0.018), position: [0.05, 1.23, 0.46] },
+    { geometry: new THREE.BoxGeometry(0.03, 0.2, 0.35), position: [GAS_VALVE_WHEEL_OFFSET, 1.38, 0] }
+  ], accent)
   const wheelPivot = new THREE.Group(); wheelPivot.name = `safety-wheel:${device.id}`; wheelPivot.position.set(GAS_VALVE_WHEEL_OFFSET, GAS_VALVE_WHEEL_HEIGHT, 0); deviceGroup.add(wheelPivot)
-  const wheel = new THREE.Mesh(new THREE.TorusGeometry(GAS_VALVE_WHEEL_RING_RADIUS, GAS_VALVE_WHEEL_TUBE_RADIUS, 8, 20), accent); wheel.rotation.y = Math.PI / 2
-  const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.36, 0.035), accent); const handle = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), accent); handle.position.y = 0.18
-  wheelPivot.add(wheel, spoke, handle)
-  addBox(deviceGroup, [0.03, 0.2, 0.35], [GAS_VALVE_WHEEL_OFFSET, 1.38, 0], accent)
+  addCompound(wheelPivot, [
+    { geometry: new THREE.TorusGeometry(GAS_VALVE_WHEEL_RING_RADIUS, GAS_VALVE_WHEEL_TUBE_RADIUS, 8, 20), rotation: [0, Math.PI / 2, 0] },
+    { geometry: new THREE.BoxGeometry(0.035, 0.36, 0.035) },
+    { geometry: new THREE.BoxGeometry(0.035, 0.36, 0.035), rotation: [Math.PI / 2, 0, 0] },
+    { geometry: new THREE.BoxGeometry(0.035, 0.36, 0.035), rotation: [Math.PI / 4, 0, 0] },
+    { geometry: new THREE.BoxGeometry(0.035, 0.36, 0.035), rotation: [-Math.PI / 4, 0, 0] },
+    { geometry: new THREE.CylinderGeometry(0.065, 0.065, 0.08, 10), rotation: [0, 0, Math.PI / 2] },
+    { geometry: new THREE.SphereGeometry(0.055, 10, 8), position: [0, 0.18, 0] }
+  ], accent, `safety-wheel-assembly:${device.id}`)
 }
 
 /**
@@ -275,7 +374,18 @@ function batchStaticMeshes(group: THREE.Group): void {
   })
   for (const mesh of removable) mesh.parent?.remove(mesh)
   for (const [material, geometries] of byMaterial) {
-    const geometry = mergeGeometries(geometries, false)
+    const hasIndexed = geometries.some((geometry) => geometry.index !== null)
+    const hasNonIndexed = geometries.some((geometry) => geometry.index === null)
+    const compatible = hasIndexed && hasNonIndexed
+      ? geometries.map((geometry) => {
+          if (!geometry.index) return geometry
+          const nonIndexed = geometry.toNonIndexed()
+          geometry.dispose()
+          return nonIndexed
+        })
+      : geometries
+    const geometry = mergeGeometries(compatible, false)
+    compatible.forEach((part) => part.dispose())
     if (!geometry) continue
     const mesh = new THREE.Mesh(geometry, material)
     mesh.name = 'batched-static-fab-geometry'; mesh.castShadow = true; mesh.receiveShadow = true

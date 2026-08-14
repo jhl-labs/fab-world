@@ -30,7 +30,8 @@ export const PoseFlags = {
   RMF_CONTROLLED: 2,
   HAS_TASK: 4,
   SAFE_STOP: 8,
-  MEASURED_HAND_POSE: 16
+  MEASURED_HAND_POSE: 16,
+  EVACUATION_GUIDE: 32
 } as const
 
 export type EntityKind = 'oht' | 'agv' | 'igv' | 'humanoid' | 'person' | 'arm'

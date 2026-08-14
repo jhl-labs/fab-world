@@ -5,9 +5,10 @@ import fireJson from '../data/scenarios/fire.json'
 import medicalJson from '../data/scenarios/medical.json'
 import referenceRmfTraceUrl from '../data/rmf-traces/humanoid-showcase.json?url'
 import { FabLayoutSchema, ScenarioSchema, type EmergencyKind, type Scenario } from './core/schema'
+import { equipmentAccessPoint } from './core/layout'
 import type { EntityMeta, EquipmentStateView, MainToWorker, WorkerToMain } from './core/protocol'
 import { POSE_FLOATS, POSE_HEADER_INTS } from './core/protocol'
-import { RenderEngine } from './render/engine'
+import type { RenderEngine } from './render/engine'
 import type { CameraMode } from './render/camera/controller'
 import { configuredRmfBridgeUrl, configuredRmfTraceSource, RmfBridgeClient, type RmfConnectionOptions, type RmfTaskConnection } from './integrations/rmf/client'
 import { RmfTracePlayer } from './integrations/rmf/trace'
@@ -49,6 +50,8 @@ export function FabApp(): ReactElement {
   const showcaseRequestedAtRef = useRef(-Infinity)
   const comparisonRequestedAtRef = useRef(-Infinity)
   const [ready, setReady] = useState(false)
+  const [rendererReady, setRendererReady] = useState(false)
+  const [rendererError, setRendererError] = useState(false)
   const entities = useFabStore((state) => state.entities)
   const store = useFabStore
   const post = (message: MainToWorker): void => workerRef.current?.postMessage(message)
@@ -178,8 +181,8 @@ export function FabApp(): ReactElement {
     // evacuation, follow one real person out, then stay with the robot's work.
     // The short protection period prevents a late RMF assignment from cutting
     // through either of the two human beats.
-    cinematicCameraUntilRef.current = now + 5_200
-    purposeCameraUntilRef.current = now + 5_200
+    cinematicCameraUntilRef.current = now + 7_000
+    purposeCameraUntilRef.current = now + 7_000
     const cue = (delay: number, shot: string, position: readonly [number, number]): void => {
       const timer = window.setTimeout(() => {
         if (cinematicSequenceRef.current !== sequence) return
@@ -200,15 +203,23 @@ export function FabApp(): ReactElement {
       engineRef.current?.setEntityLabelBadge(evacuee.id, '안전 구역 대피')
       engineRef.current?.select(evacuee)
     }
-    // Establish the full evacuation, then let the viewer travel with a real
-    // evacuee. This shows movement and direction instead of an empty exit.
-    cue(0, 'evacuation-wide', source ?? [0, 0])
+    const sourceEquipment = source
+      ? layout.bays.flatMap((bay) => bay.equipment).find((equipment) =>
+          Math.hypot(equipment.position[0] - source[0], equipment.position[2] - source[1]) < 0.2
+        )
+      : undefined
+    const visibleLeakSource = sourceEquipment ? equipmentAccessPoint(sourceEquipment, 0.5) : source ?? [0, 0]
+    // Keep the leak itself visible as the first alarm beat. The following
+    // wide and follow shots then explain where people are going; starting
+    // wide made the green plume disappear behind the source tool.
+    cue(0, 'closeup', visibleLeakSource)
+    cue(1_900, 'evacuation-wide', source ?? [0, 0])
     const evacuationFlowTimer = window.setTimeout(() => {
       if (cinematicSequenceRef.current !== sequence) return
       const state = store.getState()
       if (state.emergencyKind !== 'gasLeak' || state.phase === 'normal') return
       cueEvacuationFlow()
-    }, 2_600)
+    }, 4_500)
     cinematicTimersRef.current.push(evacuationFlowTimer)
     const valve = source
       ? [...layout.emergency.safetyDevices].sort((left, right) =>
@@ -243,7 +254,7 @@ export function FabApp(): ReactElement {
       const state = store.getState()
       if (state.emergencyKind !== 'gasLeak' || state.phase === 'normal') return
       cueRobotWork()
-    }, 5_200)
+    }, 7_000)
     cinematicTimersRef.current.push(fieldCutTimer)
   }
   const startGasRecoveryCinematic = (): void => {
@@ -468,6 +479,12 @@ export function FabApp(): ReactElement {
             engineRef.current?.cueCamera(cue.shot, cuePosition, target)
             if (target && cue.shot === 'follow') { state.select(target.id); state.setCameraMode('follow') }
             else state.setCameraMode('orbit')
+            if (configuredCue) {
+              purposeCameraUntilRef.current = Math.max(
+                purposeCameraUntilRef.current,
+                performance.now() + configuredCue.duration * 1_000
+              )
+            }
           }
         }
         if (item.type === 'taskStateChanged' && item.taskId && item.taskKind && item.taskStatus) {
@@ -515,7 +532,12 @@ export function FabApp(): ReactElement {
               state.addLog(`Open-RMF readiness 미충족으로 ${item.taskId} 배정을 차단했습니다.`, 'danger')
             }
           }
-          if (!restored && item.taskStatus === 'assigned' && item.robotId && performance.now() >= cinematicCameraUntilRef.current) {
+          if (
+            !restored &&
+            item.taskStatus === 'assigned' &&
+            item.robotId &&
+            performance.now() >= Math.max(cinematicCameraUntilRef.current, purposeCameraUntilRef.current)
+          ) {
             const robot = state.entities.find((entity) => entity.id === item.robotId)
             if (robot) {
               const target = typeof item.data?.targetX === 'number' && typeof item.data?.targetZ === 'number'
@@ -643,9 +665,28 @@ export function FabApp(): ReactElement {
   }, [])
   useEffect(() => {
     if (!ready || !viewportRef.current || engineRef.current) return
-    engineRef.current = new RenderEngine(viewportRef.current, layout, entities, sharedRef.current, (stats) => store.getState().setStats(stats))
-    engineRef.current.setEquipmentStates(equipmentStatesRef.current)
-    return () => { engineRef.current?.dispose(); engineRef.current = undefined }
+    const viewport = viewportRef.current
+    let cancelled = false
+    setRendererReady(false)
+    setRendererError(false)
+    void import('./render/engine').then(({ RenderEngine }) => {
+      if (cancelled || engineRef.current) return
+      const engine = new RenderEngine(
+        viewport,
+        layout,
+        entities,
+        sharedRef.current,
+        (stats) => store.getState().setStats(stats),
+        (mode) => store.getState().setCameraMode(mode)
+      )
+      if (cancelled) { engine.dispose(); return }
+      engineRef.current = engine
+      engine.setEquipmentStates(equipmentStatesRef.current)
+      setRendererReady(true)
+    }).catch(() => {
+      if (!cancelled) setRendererError(true)
+    })
+    return () => { cancelled = true; engineRef.current?.dispose(); engineRef.current = undefined }
   }, [ready, entities])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
@@ -659,8 +700,8 @@ export function FabApp(): ReactElement {
       if (event.key === '[' || event.key === ']') { const values = [0.5, 1, 2, 4, 8, 16]; const index = Math.max(0, values.indexOf(state.timeScale)); const value = values[Math.max(0, Math.min(values.length - 1, index + (event.key === ']' ? 1 : -1)))]!; state.setTimeScale(value); post({ type: 'setTimeScale', value }) }
       const mode = event.key === '1' ? 'orbit' : event.key === '2' ? 'follow' : event.key === '3' ? 'firstPerson' : undefined
       if (mode) { state.setCameraMode(mode); engineRef.current?.setCameraMode(mode) }
-      if (event.key.toLowerCase() === 'e') { const list = state.entities; const index = Math.max(0, list.findIndex((entity) => entity.id === state.selectedId)); const entity = list[(index + 1) % Math.max(1, list.length)]; state.select(entity?.id); engineRef.current?.select(entity) }
-      if (event.key.toLowerCase() === 'f') { const entity = state.entities.find((item) => item.id === state.selectedId); engineRef.current?.select(entity) }
+      if (event.key.toLowerCase() === 'e') { const list = state.entities; const index = Math.max(0, list.findIndex((entity) => entity.id === state.selectedId)); const entity = list[(index + 1) % Math.max(1, list.length)]; state.select(entity?.id); if (entity) state.setCameraMode('follow'); engineRef.current?.select(entity) }
+      if (event.key.toLowerCase() === 'f') { const entity = state.entities.find((item) => item.id === state.selectedId); if (entity) state.setCameraMode('follow'); engineRef.current?.select(entity) }
     }
     window.addEventListener('keydown', keydown); return () => window.removeEventListener('keydown', keydown)
   }, [])
@@ -675,6 +716,10 @@ export function FabApp(): ReactElement {
     const state = store.getState()
     rmfRef.current?.cancelTasks(state.humanoidTasks.filter((task) => !['completed', 'failed', 'cancelled'].includes(task.status)).map((task) => task.id))
     state.clearHumanoidTasks()
+    if (state.timeScale !== 1) {
+      state.setTimeScale(1)
+      post({ type: 'setTimeScale', value: 1 })
+    }
     activeScenarioRef.current = scenario
     post({ type: 'reset' })
     post({ type: 'loadScenario', scenario })
@@ -759,6 +804,11 @@ export function FabApp(): ReactElement {
     rmfRef.current?.cancelTasks([task.id])
     post({ type: 'injectHumanoidFailure' })
   }
-  const select = (entity?: EntityMeta): void => { store.getState().select(entity?.id); engineRef.current?.select(entity) }
-  return <main className="app-shell"><div className="viewport" ref={viewportRef} />{ready ? <Hud scenarios={scenarios} onTimeScale={(value) => post({ type: 'setTimeScale', value })} onStep={() => post({ type: 'step' })} onScenario={setScenario} onEmergency={trigger} onCamera={(mode: CameraMode) => engineRef.current?.setCameraMode(mode)} onSelect={select} onShowcase={startShowcase} onRiskComparison={startRiskComparison} onInspection={dispatchInspection} onInjectFailure={injectHumanoidFailure} /> : <div className="boot-screen"><div className="spinner" /><p>FABWORLD INITIALIZING</p><small>레이아웃과 결정적 시뮬레이션을 준비하고 있습니다.</small></div>}</main>
+  const select = (entity?: EntityMeta): void => {
+    const state = store.getState()
+    state.select(entity?.id)
+    if (entity) state.setCameraMode('follow')
+    engineRef.current?.select(entity)
+  }
+  return <main className="app-shell"><div className="viewport" ref={viewportRef} />{ready && rendererReady ? <Hud scenarios={scenarios} onTimeScale={(value) => post({ type: 'setTimeScale', value })} onStep={() => post({ type: 'step' })} onScenario={setScenario} onEmergency={trigger} onCamera={(mode: CameraMode) => engineRef.current?.setCameraMode(mode)} onSelect={select} onShowcase={startShowcase} onRiskComparison={startRiskComparison} onInspection={dispatchInspection} onInjectFailure={injectHumanoidFailure} /> : <div className="boot-screen" role="status" aria-live="polite" aria-atomic="true">{!rendererError && <div className="spinner" aria-hidden="true" />}<p>{rendererError ? 'RENDERER LOAD FAILED' : 'FABWORLD INITIALIZING'}</p><small>{rendererError ? '3D 렌더러를 불러오지 못했습니다.' : ready ? '3D 운영 화면을 불러오고 있습니다.' : '레이아웃과 결정적 시뮬레이션을 준비하고 있습니다.'}</small>{rendererError && <button type="button" onClick={() => window.location.reload()}>페이지 다시 불러오기</button>}</div>}</main>
 }

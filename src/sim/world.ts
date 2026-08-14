@@ -24,7 +24,7 @@ import { findHazardSource, resolveHumanoidTarget } from './targeting'
 import { updateEmergency } from './systems/emergencySystem'
 import { updateEquipment } from './systems/equipmentSystem'
 import { updateMissions } from './systems/missionSystem'
-import { updateMovement } from './systems/movementSystem'
+import { groundBodyRadius, isStationaryGroundRobot, updateMovement } from './systems/movementSystem'
 import { applyGasWorkPermit, confirmMedicalHandoff, gasWorkZonePeople, preemptLocalHumanoidTasks, requestOperatorClearance, updateHumanoids } from './systems/humanoidSystem'
 import { updatePeople } from './systems/personSystem'
 import { updateTraffic } from './systems/trafficSystem'
@@ -563,6 +563,7 @@ export class SimWorld {
           (!continuityInspector || entity.id === 'humanoid-001')
         )
         .sort((left, right) =>
+          (task.kind === 'medical_support' ? Number(right.id === 'humanoid-002') - Number(left.id === 'humanoid-002') : 0) ||
           Math.hypot(left.x - task.targetX, left.z - task.targetZ) -
             Math.hypot(right.x - task.targetX, right.z - task.targetZ) ||
           right.battery - left.battery ||
@@ -573,6 +574,8 @@ export class SimWorld {
       robot.taskId = task.id; robot.activity = 'walking'; robot.goalX = task.targetX; robot.goalZ = task.targetZ
       robot.emergency = task.kind === 'gas_isolation' || task.kind === 'medical_support' || continuityInspector
       if (continuityInspector) robot.maxSpeed = Math.max(robot.maxSpeed, 1.75)
+      if (task.kind === 'gas_isolation') robot.maxSpeed = Math.max(robot.maxSpeed, 1.75)
+      if (task.kind === 'medical_support') robot.maxSpeed = Math.max(robot.maxSpeed, 2.2)
       robot.auxB = task.kind === 'medical_support' ? 1 : task.kind === 'gas_isolation' ? -1 : 0
       robot.targetX = Number.NaN; robot.targetZ = Number.NaN; robot.route = []; robot.routeCursor = 0
       this.emitTaskState(task)
@@ -987,6 +990,7 @@ export class SimWorld {
       entity.formationBestDistance = undefined
       entity.formationLastProgressAt = undefined
       entity.formationReassignments = undefined
+      entity.formationAvoidedSlotIndices = undefined
     })
     this.emergency = { phase: 'detected', kind, startedAt: this.simTime, phaseStartedAt: this.simTime, hazard: { kind, sourceX, sourceZ, radius: 1, maxRadius: params.maxRadius, spreadRate: params.spreadRate, fixedAt: params.finish } }
     if (kind === 'medical') {
@@ -1021,6 +1025,12 @@ export class SimWorld {
     if (phase === 'alarm') {
       const kind = this.emergency.kind
       this.overrideBehavior('type:person', kind === 'medical' ? 'yield' : 'evacuate')
+      this.entities.filter((entity) => entity.kind === 'humanoid').forEach((entity) => {
+        // This is an explicit simulated response role, not a generic
+        // "emergency-colored robot". The renderer uses it to put a lit baton
+        // in the robot's hand while it is available to guide evacuation.
+        entity.evacuationGuiding = kind === 'gasLeak' || kind === 'fire'
+      })
       if (kind === 'gasLeak') {
         this.overrideBehavior('type:agv', 'yield')
         this.overrideBehavior('type:oht', 'yield')
@@ -1099,6 +1109,7 @@ export class SimWorld {
       const holdAtMuster = entity.kind === 'person' && this.emergency.kind !== 'medical'
       entity.behavior = holdAtMuster ? 'halt' : 'normal'
       entity.emergency = false
+      entity.evacuationGuiding = false
       if (entity.kind !== 'arm') entity.targetDelay = 0
       if (entity.kind === 'person') {
         entity.maxSpeed = entity.preferredSpeed
@@ -1115,6 +1126,7 @@ export class SimWorld {
           entity.formationBestDistance = undefined
           entity.formationLastProgressAt = undefined
           entity.formationReassignments = undefined
+          entity.formationAvoidedSlotIndices = undefined
         }
         entity.nextActionAt = this.simTime + 2 + (entity.index % 7)
         entity.reactionUntil = undefined
@@ -1142,6 +1154,7 @@ export class SimWorld {
     this.entities.forEach((entity) => {
       entity.behavior = 'normal'
       entity.emergency = false
+      entity.evacuationGuiding = false
       if (entity.kind === 'person') {
         entity.auxB = 0
         entity.gasSpotterTaskId = undefined
@@ -1151,6 +1164,7 @@ export class SimWorld {
         entity.formationBestDistance = undefined
         entity.formationLastProgressAt = undefined
         entity.formationReassignments = undefined
+        entity.formationAvoidedSlotIndices = undefined
         entity.personActivity = entity.personActivity === 'collapsed' ? 'idle' : entity.personActivity
         entity.reactionStartedAt = undefined
         entity.reactionUntil = undefined
@@ -1304,7 +1318,7 @@ export class SimWorld {
         const path = graph.findPath(from, graph.nearest(point.position[0], point.position[2]), this.hazardLevels)
         const distance = path.length > 0 ? pathDistance(graph, path) : Infinity
         const assigned = this.evacuationAssignments.get(point.id) ?? 0
-        const crowdPenalty = 1 + assigned / Math.max(1, point.capacity) * 0.5
+        const crowdPenalty = 1 + assigned / Math.max(1, point.capacity) * 1.5
         return { point, path, score: distance * crowdPenalty }
       })
       .filter((candidate) => Number.isFinite(candidate.score))
@@ -1318,6 +1332,7 @@ export class SimWorld {
       person.formationBestDistance = undefined
       person.formationLastProgressAt = undefined
       person.formationReassignments = undefined
+      person.formationAvoidedSlotIndices = undefined
     }
     person.evacuationMusterId = selected.point.id
     if (person.evacuationSlotIndex === undefined) {
@@ -1345,15 +1360,20 @@ export class SimWorld {
     const slot = musterSlot(person.evacuationSlotIndex, muster.capacity, muster.position[2])
     person.goalX = muster.position[0] + slot[0]
     person.goalZ = muster.position[2] + slot[1]
+    person.avoidanceObstacleId = undefined
+    person.avoidanceX = undefined
+    person.avoidanceZ = undefined
     person.formationBestDistance = Math.hypot(person.x - person.goalX, person.z - person.goalZ)
     person.formationLastProgressAt = this.simTime
     person.formationReassignments = 0
+    person.formationAvoidedSlotIndices = undefined
   }
   reassignBlockedEvacuationSlot(person: SimEntity): boolean {
     if (person.kind !== 'person' || person.evacuationSlotIndex === undefined || !person.evacuationMusterId) return false
     const muster = this.layout.layout.emergency.musterPoints.find((point) => point.id === person.evacuationMusterId)
     if (!muster) return false
     const previous = person.evacuationSlotIndex
+    const avoided = [...new Set([...(person.formationAvoidedSlotIndices ?? []), previous])]
     const next = claimMusterSlot(
       this,
       person,
@@ -1362,7 +1382,7 @@ export class SimWorld {
       muster.position[0],
       muster.position[2],
       true,
-      previous
+      avoided
     )
     if (next === previous) return false
     person.evacuationSlotIndex = next
@@ -1371,9 +1391,13 @@ export class SimWorld {
     person.goalZ = muster.position[2] + slot[1]
     person.targetX = person.goalX
     person.targetZ = person.goalZ
+    person.avoidanceObstacleId = undefined
+    person.avoidanceX = undefined
+    person.avoidanceZ = undefined
     person.formationBestDistance = Math.hypot(person.x - person.goalX, person.z - person.goalZ)
     person.formationLastProgressAt = this.simTime
     person.formationReassignments = (person.formationReassignments ?? 0) + 1
+    person.formationAvoidedSlotIndices = avoided
     return true
   }
   dispatchResponders(count: number): void {
@@ -1419,7 +1443,14 @@ export class SimWorld {
       .sort((a, b) => hazard ? Math.hypot(a.x - hazard.sourceX, a.z - hazard.sourceZ) - Math.hypot(b.x - hazard.sourceX, b.z - hazard.sourceZ) : a.index - b.index)[0]
     if (entity) {
       entity.behavior = 'respond'; entity.emergency = true; entity.mission = mission
-      entity.maxSpeed = Math.max(entity.maxSpeed, mission === 'hazmat-equipment' || mission === 'remote-equipment-inspection' ? 3 : 2.2)
+      entity.maxSpeed = Math.max(
+        entity.maxSpeed,
+        mission === 'hazmat-equipment' || mission === 'remote-equipment-inspection'
+          ? 3
+          : mission === 'medical-transport'
+            ? 3.2
+            : 2.2
+      )
       entity.missionActivity = (mission === 'hazmat-equipment' || mission === 'remote-equipment-inspection') ? 'enroute' : undefined
       entity.missionActivityStartedAt = this.simTime
       entity.route = []; entity.routeCursor = 0; entity.targetX = Number.NaN; entity.targetZ = Number.NaN; entity.targetDelay = 0
@@ -1720,7 +1751,7 @@ export class SimWorld {
     operator.speed = 0
     operator.status = 'working'
     operator.animation = 9
-    operator.auxA = Math.min(1, manipulationElapsed / 6.2)
+    operator.auxA = Math.min(1, manipulationElapsed / 8.2)
     operator.yaw = comparison.targetYaw
     if (!comparison.contactEmitted && manipulationElapsed >= 1.2) {
       comparison.contactEmitted = true
@@ -1756,7 +1787,7 @@ export class SimWorld {
         }
       })
     }
-    if (manipulationElapsed < 6.2) return
+    if (manipulationElapsed < 8.2) return
     comparison.stage = 'verified'
     comparison.stageStartedAt = this.simTime
     this.gasIsolationElapsed = Math.max(0, this.simTime - comparison.startedAt)
@@ -1886,12 +1917,31 @@ export class SimWorld {
     const graph = entity.kind === 'oht' ? this.layout.railGraph : entity.kind === 'humanoid' || entity.kind === 'person' ? this.layout.walkGraph : this.layout.roadGraph
     const hazard = this.emergency.hazard
     const from = graph.nearest(entity.x, entity.z)
+    const reserved = this.entities
+      .filter((other) =>
+        other !== entity &&
+        other.behavior === 'yield' &&
+        other.emergency &&
+        (entity.kind === 'oht' ? other.kind === 'oht' : other.kind !== 'oht' && other.kind !== 'person' && other.kind !== 'humanoid') &&
+        Number.isFinite(other.goalX) &&
+        Number.isFinite(other.goalZ)
+      )
+      .map((other) => [other.goalX, other.goalZ] as const)
+    const humanoidStations = entity.kind === 'oht'
+      ? []
+      : this.entities
+          .filter((other) => other.kind === 'humanoid')
+          .map((other) => [other.x, other.z] as const)
     // OHTs do not emergency-brake in place for a gas incident. They finish
     // their current rail segment, clear the affected transfer corridor, and
     // wait at a reachable rail-side parking node beyond the warning boundary.
     const target = graph.nodes
       .map((node, index) => ({ node, index, distance: Math.hypot(node.x - entity.x, node.z - entity.z) }))
-      .filter(({ node }) => !hazard || Math.hypot(node.x - hazard.sourceX, node.z - hazard.sourceZ) > hazard.maxRadius * 1.8 + 5)
+      .filter(({ node }) =>
+        (!hazard || Math.hypot(node.x - hazard.sourceX, node.z - hazard.sourceZ) > hazard.maxRadius * 1.8 + 5) &&
+        reserved.every(([x, z]) => Math.hypot(node.x - x, node.z - z) >= (entity.kind === 'oht' ? 4 : 2.2)) &&
+        humanoidStations.every(([x, z]) => Math.hypot(node.x - x, node.z - z) >= 3)
+      )
       .sort((left, right) => left.distance - right.distance || left.node.id.localeCompare(right.node.id))
       .find(({ index }) => graph.findPath(from, index, this.hazardLevels).length > 0)?.node
     if (target) { entity.goalX = target.x; entity.goalZ = target.z }
@@ -1967,7 +2017,8 @@ export class SimWorld {
         (entity.rmfControlled ? PoseFlags.RMF_CONTROLLED : 0) |
         (entity.taskId ? PoseFlags.HAS_TASK : 0) |
         (entity.activity === 'safeStop' || entity.status === 'error' ? PoseFlags.SAFE_STOP : 0) |
-        (measuredHandPose ? PoseFlags.MEASURED_HAND_POSE : 0)
+        (measuredHandPose ? PoseFlags.MEASURED_HAND_POSE : 0) |
+        (entity.evacuationGuiding && entity.activity !== 'manipulating' && entity.status !== 'error' ? PoseFlags.EVACUATION_GUIDE : 0)
       this.pose[slot + PoseSlot.AUX_A] = entity.auxA; this.pose[slot + PoseSlot.AUX_B] = entity.auxB
       this.pose[slot + PoseSlot.LEFT_HAND_X] = entity.measuredLeftHandPosition?.[0] ?? 0
       this.pose[slot + PoseSlot.LEFT_HAND_Y] = entity.measuredLeftHandPosition?.[1] ?? 0
@@ -2000,24 +2051,69 @@ function claimMusterSlot(
   musterX: number,
   musterZ: number,
   nearest = false,
-  avoidIndex?: number
+  avoidIndices: readonly number[] = []
 ): number {
   const occupied = new Set(world.entities
     .filter((entity) => entity !== person && entity.evacuationMusterId === musterId && entity.evacuationSlotIndex !== undefined)
     .map((entity) => entity.evacuationSlotIndex!))
+  const fixedRobotBodies = world.entities.filter((entity) => entity !== person && isStationaryGroundRobot(entity))
   const slots = musterSlots(capacity, musterZ)
   const outward = musterZ < 0 ? -1 : 1
   const available = slots
-    .map((slot, index) => ({
-      index,
-      score: nearest
-        ? Math.hypot(musterX + slot[0] - person.x, musterZ + slot[1] - person.z)
-        : -(slot[1] * outward) * 100 + Math.abs(musterX + slot[0] - person.x)
-    }))
-    .filter(({ index }) => !occupied.has(index))
+    .map((slot, index) => {
+      const slotX = musterX + slot[0]
+      const slotZ = musterZ + slot[1]
+      const approachX = person.x + (slotX - person.x) * 0.25
+      const approachZ = person.z + (slotZ - person.z) * 0.25
+      const endpointRobotMargin = fixedRobotBodies.length === 0
+        ? Infinity
+        : Math.min(...fixedRobotBodies.map((robot) =>
+            Math.hypot(slotX - robot.x, slotZ - robot.z) - groundBodyRadius(person) - groundBodyRadius(robot)
+          ))
+      const robotMargin = fixedRobotBodies.length === 0
+        ? Infinity
+        : Math.min(...fixedRobotBodies.map((robot) =>
+            Math.min(
+              Math.hypot(slotX - robot.x, slotZ - robot.z),
+              pointToSegmentDistance(robot.x, robot.z, approachX, approachZ, slotX, slotZ)
+            ) - groundBodyRadius(person) - groundBodyRadius(robot)
+          ))
+      return {
+        index,
+        score: nearest
+          ? Math.hypot(slotX - person.x, slotZ - person.z) + Math.max(0, 1.2 - robotMargin) * 12
+          : -(slot[1] * outward) * 100 + Math.abs(slotX - person.x) +
+            Math.max(0, 0.72 - endpointRobotMargin) * 1_000
+      }
+    })
+    .filter(({ index }) => {
+      if (occupied.has(index)) return false
+      const slot = slots[index]!
+      return fixedRobotBodies.every((robot) =>
+        Math.hypot(musterX + slot[0] - robot.x, musterZ + slot[1] - robot.z) >=
+          groundBodyRadius(person) + groundBodyRadius(robot) + 0.42
+      )
+    })
     .sort((left, right) => left.score - right.score || left.index - right.index)
-  const alternatives = avoidIndex === undefined ? available : available.filter(({ index }) => index !== avoidIndex)
+  const alternatives = available.filter(({ index }) => !avoidIndices.includes(index))
   return alternatives[0]?.index ?? available[0]?.index ?? person.index % slots.length
+}
+
+function pointToSegmentDistance(
+  pointX: number,
+  pointZ: number,
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number
+): number {
+  const deltaX = toX - fromX
+  const deltaZ = toZ - fromZ
+  const lengthSquared = deltaX ** 2 + deltaZ ** 2
+  const projection = lengthSquared < 0.000_001
+    ? 0
+    : Math.max(0, Math.min(1, ((pointX - fromX) * deltaX + (pointZ - fromZ) * deltaZ) / lengthSquared))
+  return Math.hypot(pointX - (fromX + deltaX * projection), pointZ - (fromZ + deltaZ * projection))
 }
 
 function musterSlot(index: number, capacity: number, musterZ: number): readonly [number, number] {

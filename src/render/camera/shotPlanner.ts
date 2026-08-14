@@ -1,3 +1,4 @@
+import { EQUIPMENT_DIMENSIONS } from '../../core/layout'
 import type { FabLayout } from '../../core/schema'
 
 export type ShotAnchor = readonly [number, number]
@@ -54,14 +55,13 @@ export function buildShotAnchors(layout: FabLayout, spacing = 8): ShotAnchor[] {
 
 export function buildShotObstacles(layout: FabLayout, padding = 0.08): ShotObstacle[] {
   const equipment = layout.bays.flatMap((bay) => bay.equipment.map((equipment) => {
-    const width = equipment.type === 'lithography' ? 4.6 : equipment.type === 'cmp' ? 5 : 3.5
-    const depth = 4.2
+    const { width, depth, height } = EQUIPMENT_DIMENSIONS[equipment.type]
     const quarterTurn = Math.abs(Math.sin(equipment.rotation)) > 0.7
     return {
       center: [equipment.position[0], equipment.position[2]] as const,
       halfWidth: (quarterTurn ? depth : width) / 2 + padding,
       halfDepth: (quarterTurn ? width : depth) / 2 + padding,
-      height: equipment.type === 'furnace' ? 3.8 : 2.8
+      height
     }
   }))
   // The structural columns are tall enough to dominate a close-up even

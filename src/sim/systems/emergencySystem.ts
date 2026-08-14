@@ -28,7 +28,10 @@ function updateMedicalResponse(world: SimWorld): void {
   const victim = world.entities.find((entity) => entity.id === response.victimId)
   const responders = response.responderIds.map((id) => world.entities.find((entity) => entity.id === id)).filter((entity) => entity !== undefined)
   const vehicle = response.vehicleId ? world.entities.find((entity) => entity.id === response.vehicleId) : undefined
-  if (response.stage === 'dispatched' && responders.length >= 2 && responders.every((entity) => Math.hypot(entity.x - hazard.sourceX, entity.z - hazard.sourceZ) < 2.2)) {
+  // The patient, two kneeling responders, and the staged IGV all have real
+  // body envelopes. Treat 2.7m as the cleared treatment perimeter so collision
+  // separation does not invalidate an otherwise ready two-person team.
+  if (response.stage === 'dispatched' && responders.length >= 2 && responders.every((entity) => Math.hypot(entity.x - hazard.sourceX, entity.z - hazard.sourceZ) < 2.7)) {
     response.stage = 'treating'
     response.stageStartedAt = world.simTime
     world.events.push({ type: 'hudMessage', message: '구조 인력 2인이 환자 상태를 평가하고 응급처치를 시작합니다.', data: { severity: 'warning' } })
@@ -75,6 +78,7 @@ function updateMedicalResponse(world: SimWorld): void {
     response.stage = 'transporting'
     response.stageStartedAt = world.simTime
     const station = world.layout.layout.emergency.medicalStation.position
+    vehicle.auxA = 1
     vehicle.goalX = station[0]; vehicle.goalZ = station[2]; vehicle.route = []; vehicle.routeCursor = 0; vehicle.targetX = Number.NaN; vehicle.targetZ = Number.NaN
     if (victim) victim.carriedById = vehicle.id
     for (const responder of responders) {
@@ -91,7 +95,7 @@ function updateMedicalResponse(world: SimWorld): void {
     if (Math.hypot(vehicle.x - station[0], vehicle.z - station[2]) < 2) {
       response.stage = 'delivered'
       response.stageStartedAt = world.simTime
-      vehicle.mission = undefined; vehicle.behavior = 'normal'; vehicle.emergency = false; vehicle.maxSpeed = 1.7
+      vehicle.mission = undefined; vehicle.behavior = 'normal'; vehicle.emergency = false; vehicle.maxSpeed = 1.7; vehicle.auxA = 0
       if (victim) { victim.x = station[0]; victim.y = 0.9; victim.z = station[2]; victim.behavior = 'normal'; victim.emergency = false; victim.personActivity = 'idle'; victim.animation = 0; victim.carriedById = undefined }
       for (const responder of responders) {
         responder.behavior = 'normal'

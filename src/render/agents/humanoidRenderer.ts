@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
   HUMANOID_HAND_RADIUS,
@@ -29,12 +30,15 @@ interface HumanoidRig {
   rightLeg: ArticulatedLimb
   status: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>
   medicalKit: THREE.Group
+  evacuationBaton: THREE.Group
+  batonGlow: THREE.MeshStandardMaterial
+  batonLight: THREE.PointLight
   visualPosition: THREE.Vector3
   visualYaw: number
   initialized: boolean
 }
 
-const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xe7edf2, roughness: 0.32, metalness: 0.38 })
+const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xe7edf2, roughness: 0.32, metalness: 0.38, vertexColors: true })
 const bodyPanelMaterial = new THREE.MeshStandardMaterial({ color: 0xc5d1dc, roughness: 0.27, metalness: 0.58 })
 const jointMaterial = new THREE.MeshStandardMaterial({ color: 0x263746, roughness: 0.45, metalness: 0.58 })
 const visorMaterial = new THREE.MeshStandardMaterial({ color: 0x16384d, emissive: 0x0f638e, emissiveIntensity: 1.5, roughness: 0.18, metalness: 0.5 })
@@ -47,31 +51,70 @@ function dampAngle(current: number, target: number, lambda: number, dt: number):
   return current + difference * (1 - Math.exp(-lambda * dt))
 }
 
-function articulatedLimb(upperLength: number, lowerLength: number, radius: number, leg = false): ArticulatedLimb {
+interface BodyGeometryLayer {
+  geometry: THREE.BufferGeometry
+  tint?: number
+}
+
+function articulatedLimb(upperLength: number, lowerLength: number, radius: number, leg = false, side: -1 | 1 = 1): ArticulatedLimb {
   const root = new THREE.Group()
   // Each limb segment moves as one rigid body. Merge its cover, collar, and
   // guard so close-up robots keep their silhouette without spending three
   // draw calls per segment.
   const upper = mergedBodyMesh([
-    translatedGeometry(new THREE.CapsuleGeometry(radius, upperLength - radius * 2, 4, 8), 0, -upperLength / 2, 0),
-    new THREE.SphereGeometry(radius * 1.12, 10, 8),
-    translatedGeometry(new THREE.BoxGeometry(radius * 1.62, upperLength * 0.36, radius * 1.3), 0, -upperLength * 0.52, 0)
+    { geometry: translatedGeometry(new THREE.CapsuleGeometry(radius, upperLength - radius * 2, 4, 8), 0, -upperLength / 2, 0), tint: 0xf5f8fa },
+    ...(!leg ? [{ geometry: new THREE.SphereGeometry(radius * 1.04, 10, 8), tint: 0xb7c6d0 }] : []),
+    { geometry: translatedGeometry(new RoundedBoxGeometry(radius * 1.72, upperLength * 0.42, radius * 1.42, 1, radius * 0.24), radius * 0.29, -upperLength * 0.5, 0), tint: 0xd4dee5 },
+    { geometry: translatedGeometry(new THREE.TorusGeometry(radius * 0.91, radius * 0.13, 5, 10), 0, -upperLength + radius * 0.1, 0), tint: 0x647887 }
   ])
+  upper.name = leg ? 'humanoid-thigh-shell' : 'humanoid-upper-arm-shell'
   const lower = new THREE.Group()
   lower.position.y = -upperLength
-  const lowerParts = [
-    translatedGeometry(new THREE.CapsuleGeometry(radius * 0.9, lowerLength - radius * 1.8, 4, 8), 0, -lowerLength / 2, 0)
+  const lowerParts: BodyGeometryLayer[] = [
+    { geometry: translatedGeometry(new THREE.CapsuleGeometry(radius * 0.9, lowerLength - radius * 1.8, 4, 8), 0, -lowerLength / 2, 0), tint: 0xf5f8fa }
   ]
   const end = leg
-    ? new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, radius * 2.1), jointMaterial)
-    : new THREE.Mesh(new THREE.SphereGeometry(radius * 0.9, 10, 8), jointMaterial)
+    ? mergedMesh([
+        translatedGeometry(new RoundedBoxGeometry(0.28, 0.105, radius * 2.1, 1, 0.025), 0.07, 0, 0),
+        translatedGeometry(new RoundedBoxGeometry(0.17, 0.07, radius * 2.24, 1, 0.02), -0.1, 0.025, 0),
+        translatedGeometry(new RoundedBoxGeometry(0.31, 0.028, radius * 2.24, 1, 0.008), 0.075, -0.063, 0),
+        translatedGeometry(new RoundedBoxGeometry(0.065, 0.027, radius * 1.82, 1, 0.008), 0.115, 0.063, 0),
+        translatedGeometry(new RoundedBoxGeometry(0.065, 0.027, radius * 1.82, 1, 0.008), 0.04, 0.063, 0)
+      ], jointMaterial)
+    : mergedMesh([
+        new RoundedBoxGeometry(radius * 1.05, radius * 1.35, radius * 1.5, 1, radius * 0.25),
+        translatedGeometry(new THREE.TorusGeometry(radius * 0.62, radius * 0.1, 5, 10).rotateX(Math.PI / 2), 0, radius * 0.72, 0),
+        ...[-0.38, 0, 0.38].map((lateral) => translatedGeometry(
+          new THREE.CapsuleGeometry(radius * 0.14, radius * 0.44, 3, 6),
+          radius * 0.04,
+          -radius * 0.92,
+          lateral * radius
+        )),
+        translatedGeometry(
+          new THREE.CapsuleGeometry(radius * 0.18, radius * 0.38, 3, 6).rotateX(Math.PI / 2).rotateZ(side * 0.16),
+          radius * 0.02,
+          -radius * 0.12,
+          side * radius * 0.82
+        )
+      ], jointMaterial)
+  end.name = leg ? 'humanoid-articulated-foot' : 'humanoid-articulated-hand'
   end.position.set(leg ? 0.1 : 0, -lowerLength, 0)
   if (leg) {
-    lowerParts.push(translatedGeometry(new THREE.BoxGeometry(radius * 1.55, lowerLength * 0.38, radius * 1.25), 0.04, -lowerLength * 0.54, 0))
+    lowerParts.push(
+      { geometry: translatedGeometry(new RoundedBoxGeometry(radius * 1.72, lowerLength * 0.4, radius * 1.35, 1, radius * 0.22), radius * 0.34, -lowerLength * 0.52, 0), tint: 0xd0dbe3 },
+      { geometry: translatedGeometry(new RoundedBoxGeometry(radius * 0.34, lowerLength * 0.34, radius * 1.12, 1, radius * 0.1), radius * 0.83, -lowerLength * 0.19, 0), tint: 0x8395a2 },
+      { geometry: translatedGeometry(new THREE.TorusGeometry(radius * 0.8, radius * 0.11, 5, 10), 0, -radius * 0.08, 0), tint: 0x647887 }
+    )
   } else {
-    lowerParts.push(translatedGeometry(new THREE.CylinderGeometry(radius, radius, radius * 0.52, 10), 0, -lowerLength + radius * 0.12, 0))
+    lowerParts.push(
+      { geometry: translatedGeometry(new RoundedBoxGeometry(radius * 1.68, lowerLength * 0.38, radius * 1.4, 1, radius * 0.22), radius * 0.26, -lowerLength * 0.48, 0), tint: 0xd0dbe3 },
+      { geometry: translatedGeometry(new RoundedBoxGeometry(radius * 0.28, lowerLength * 0.3, radius * 1.08, 1, radius * 0.1), radius * 0.82, -lowerLength * 0.22, 0), tint: 0x8ba0ad },
+      { geometry: translatedGeometry(new THREE.CylinderGeometry(radius, radius * 0.9, radius * 0.52, 10), 0, -lowerLength + radius * 0.12, 0), tint: 0x647887 }
+    )
   }
-  lower.add(mergedBodyMesh(lowerParts), end)
+  const lowerShell = mergedBodyMesh(lowerParts)
+  lowerShell.name = leg ? 'humanoid-shin-shell' : 'humanoid-forearm-shell'
+  lower.add(lowerShell, end)
   root.add(upper, lower)
   return { root, lower, end }
 }
@@ -81,57 +124,135 @@ function translatedGeometry(geometry: THREE.BufferGeometry, x: number, y: number
   return geometry
 }
 
-function mergedBodyMesh(parts: THREE.BufferGeometry[]): THREE.Mesh {
-  const geometry = mergeGeometries(parts, false)
-  parts.forEach((part) => part.dispose())
-  if (!geometry) throw new Error('Failed to merge humanoid limb geometry')
+function mergedBodyMesh(parts: Array<THREE.BufferGeometry | BodyGeometryLayer>): THREE.Mesh {
+  const prepared = parts.map((part) => {
+    const layer = part instanceof THREE.BufferGeometry ? { geometry: part } : part
+    const geometry = layer.geometry
+    const normalized = geometry.index ? geometry.toNonIndexed() : geometry
+    if (normalized !== geometry) geometry.dispose()
+    const tint = new THREE.Color(layer.tint ?? 0xffffff)
+    const colors = new Float32Array(normalized.getAttribute('position').count * 3)
+    for (let offset = 0; offset < colors.length; offset += 3) {
+      colors[offset] = tint.r
+      colors[offset + 1] = tint.g
+      colors[offset + 2] = tint.b
+    }
+    normalized.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    return normalized
+  })
+  const geometry = mergeGeometries(prepared, false)
+  prepared.forEach((part) => part.dispose())
+  if (!geometry) throw new Error('Failed to merge humanoid body geometry')
   return new THREE.Mesh(geometry, bodyMaterial)
+}
+
+function mergedMesh(parts: THREE.BufferGeometry[], material: THREE.Material): THREE.Mesh {
+  // Procedural primitives do not all use the same indexed representation
+  // (notably RoundedBoxGeometry). Normalize before merging so a visual-only
+  // detail can never turn into a renderer boot failure at runtime.
+  const normalized = parts.map((part) => {
+    if (!part.index) return part
+    const nonIndexed = part.toNonIndexed()
+    part.dispose()
+    return nonIndexed
+  })
+  const geometry = mergeGeometries(normalized, false)
+  normalized.forEach((part) => part.dispose())
+  if (!geometry) throw new Error('Failed to merge humanoid limb geometry')
+  return new THREE.Mesh(geometry, material)
 }
 
 function createRig(): HumanoidRig {
   const root = new THREE.Group()
   const torso = new THREE.Group(); torso.position.y = 1.28
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.55, 0.56), bodyMaterial); torso.add(chest)
-  const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.035), bodyPanelMaterial); chestPlate.position.set(0.04, 0.04, 0.295); torso.add(chestPlate)
-  const chestCore = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.3), visorMaterial); chestCore.position.x = 0.2; torso.add(chestCore)
-  const chestStrip = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.025, 0.04), accentMaterial); chestStrip.position.set(0.05, 0.17, 0.32); torso.add(chestStrip)
-  for (const side of [-1, 1]) {
-    const shoulderPlate = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.12, 0.3), bodyPanelMaterial)
-    shoulderPlate.position.set(0, 0.2, side * 0.31); torso.add(shoulderPlate)
-  }
-  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.22, 0.48), jointMaterial); pelvis.position.y = 0.9; root.add(pelvis, torso)
-  const waistRing = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.5), accentMaterial); waistRing.position.y = 1.01; root.add(waistRing)
+  const chest = mergedBodyMesh([
+    { geometry: new RoundedBoxGeometry(0.42, 0.43, 0.48, 1, 0.065), tint: 0xf3f7f9 },
+    { geometry: translatedGeometry(new RoundedBoxGeometry(0.32, 0.12, 0.62, 1, 0.045), -0.01, 0.19, 0), tint: 0xd4dee5 },
+    { geometry: translatedGeometry(new RoundedBoxGeometry(0.34, 0.18, 0.38, 1, 0.045), -0.015, -0.26, 0), tint: 0xc4d1da },
+    { geometry: translatedGeometry(new THREE.TorusGeometry(0.13, 0.025, 6, 16).rotateX(Math.PI / 2).scale(0.85, 1, 1), 0, 0.28, 0), tint: 0x718692 }
+  ]); torso.add(chest)
+  const torsoPanels = mergedMesh([
+    translatedGeometry(new RoundedBoxGeometry(0.035, 0.31, 0.31, 1, 0.014), 0.218, 0.015, 0),
+    translatedGeometry(new RoundedBoxGeometry(0.3, 0.12, 0.13, 1, 0.025), 0, 0.2, -0.285),
+    translatedGeometry(new RoundedBoxGeometry(0.3, 0.12, 0.13, 1, 0.025), 0, 0.2, 0.285),
+    translatedGeometry(new RoundedBoxGeometry(0.04, 0.12, 0.2, 1, 0.012), 0.232, -0.2, 0)
+  ], bodyPanelMaterial)
+  torso.add(torsoPanels)
+  const chestCore = new THREE.Mesh(new RoundedBoxGeometry(0.055, 0.17, 0.245, 1, 0.018), visorMaterial); chestCore.position.x = 0.24; torso.add(chestCore)
+  const chestStrip = new THREE.Mesh(new RoundedBoxGeometry(0.026, 0.035, 0.22, 1, 0.01), accentMaterial); chestStrip.position.set(0.249, 0.14, 0); torso.add(chestStrip)
+  const pelvis = mergedMesh([
+    new RoundedBoxGeometry(0.34, 0.18, 0.39, 1, 0.045),
+    translatedGeometry(new THREE.SphereGeometry(0.115, 10, 8), 0, -0.075, -0.16),
+    translatedGeometry(new THREE.SphereGeometry(0.115, 10, 8), 0, -0.075, 0.16)
+  ], jointMaterial); pelvis.position.y = 0.9; root.add(pelvis, torso)
+  const waistRing = new THREE.Mesh(new THREE.TorusGeometry(0.215, 0.024, 6, 18).rotateX(Math.PI / 2).scale(0.83, 1, 1), accentMaterial); waistRing.position.y = 1.015; root.add(waistRing)
 
   const head = new THREE.Group(); head.position.set(0, 1.73, 0)
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), bodyMaterial); skull.scale.set(0.9, 1.08, 1)
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.32), visorMaterial); visor.position.x = 0.19
-  const crown = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.055, 0.28), bodyPanelMaterial); crown.position.y = 0.18
+  const skull = mergedBodyMesh([
+    { geometry: new THREE.CapsuleGeometry(0.17, 0.08, 5, 12).scale(0.92, 1, 1.08), tint: 0xf4f7f9 },
+    { geometry: translatedGeometry(new RoundedBoxGeometry(0.12, 0.12, 0.29, 1, 0.025), -0.1, -0.08, 0), tint: 0xd0dbe2 },
+    { geometry: translatedGeometry(new THREE.CylinderGeometry(0.105, 0.13, 0.105, 12), 0, -0.22, 0), tint: 0x697d8a }
+  ])
+  const visor = new THREE.Mesh(new RoundedBoxGeometry(0.065, 0.145, 0.315, 1, 0.03), visorMaterial); visor.position.x = 0.17
+  const crown = mergedMesh([
+    translatedGeometry(new RoundedBoxGeometry(0.2, 0.06, 0.27, 1, 0.018), -0.015, 0.18, 0),
+    translatedGeometry(new RoundedBoxGeometry(0.08, 0.13, 0.045, 1, 0.014), -0.075, 0.08, -0.18),
+    translatedGeometry(new RoundedBoxGeometry(0.08, 0.13, 0.045, 1, 0.014), -0.075, 0.08, 0.18)
+  ], bodyPanelMaterial)
   const sensor = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), accentMaterial); sensor.position.set(0.2, 0.11, 0)
   head.add(skull, visor, crown, sensor); root.add(head)
 
   const armRadius = HUMANOID_HAND_RADIUS / 0.9
-  const leftArm = articulatedLimb(HUMANOID_UPPER_ARM_LENGTH, HUMANOID_LOWER_ARM_LENGTH, armRadius); leftArm.root.position.set(0, HUMANOID_SHOULDER_HEIGHT, -HUMANOID_SHOULDER_LATERAL)
-  const rightArm = articulatedLimb(HUMANOID_UPPER_ARM_LENGTH, HUMANOID_LOWER_ARM_LENGTH, armRadius); rightArm.root.position.set(0, HUMANOID_SHOULDER_HEIGHT, HUMANOID_SHOULDER_LATERAL)
-  const leftLeg = articulatedLimb(0.39, 0.39, 0.115, true); leftLeg.root.position.set(0, 0.82, -0.16)
-  const rightLeg = articulatedLimb(0.39, 0.39, 0.115, true); rightLeg.root.position.set(0, 0.82, 0.16)
+  const leftArm = articulatedLimb(HUMANOID_UPPER_ARM_LENGTH, HUMANOID_LOWER_ARM_LENGTH, armRadius, false, -1); leftArm.root.position.set(0, HUMANOID_SHOULDER_HEIGHT, -HUMANOID_SHOULDER_LATERAL)
+  const rightArm = articulatedLimb(HUMANOID_UPPER_ARM_LENGTH, HUMANOID_LOWER_ARM_LENGTH, armRadius, false, 1); rightArm.root.position.set(0, HUMANOID_SHOULDER_HEIGHT, HUMANOID_SHOULDER_LATERAL)
+  const leftLeg = articulatedLimb(0.39, 0.39, 0.115, true, -1); leftLeg.root.position.set(0, 0.82, -0.16)
+  const rightLeg = articulatedLimb(0.39, 0.39, 0.115, true, 1); rightLeg.root.position.set(0, 0.82, 0.16)
   root.add(leftArm.root, rightArm.root, leftLeg.root, rightLeg.root)
 
   const statusMaterial = new THREE.MeshStandardMaterial({ color: 0x3ddc84, emissive: 0x3ddc84, emissiveIntensity: 2 })
   const status = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), statusMaterial); status.position.set(0.2, 1.46, 0.22); root.add(status)
   const medicalKit = new THREE.Group()
   const kitCase = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.3), medicalKitMaterial)
-  const verticalMark = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.09, 0.035), medicalMarkMaterial); verticalMark.position.x = 0.126
-  const horizontalMark = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.035, 0.09), medicalMarkMaterial); horizontalMark.position.x = 0.126
-  medicalKit.add(kitCase, verticalMark, horizontalMark)
+  const kitMark = mergedMesh([
+    translatedGeometry(new THREE.BoxGeometry(0.012, 0.09, 0.035), 0.126, 0, 0),
+    translatedGeometry(new THREE.BoxGeometry(0.012, 0.035, 0.09), 0.126, 0, 0)
+  ], medicalMarkMaterial)
+  medicalKit.add(kitCase, kitMark)
   medicalKit.position.set(0.12, 1.02, -0.3)
   medicalKit.visible = false
   root.add(medicalKit)
+  const evacuationBaton = new THREE.Group()
+  evacuationBaton.name = 'evacuation-guidance-baton'
+  const batonHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.2, 10), jointMaterial)
+  batonHandle.position.y = 0.1
+  const batonGlow = new THREE.MeshStandardMaterial({
+    color: 0xff7a20,
+    emissive: 0xff3b00,
+    emissiveIntensity: 4.2,
+    transparent: true,
+    opacity: 0.94,
+    roughness: 0.18,
+    metalness: 0.08
+  })
+  const batonSignal = mergedMesh([
+    translatedGeometry(new THREE.CylinderGeometry(0.042, 0.052, 0.66, 12), 0, 0.53, 0),
+    translatedGeometry(new THREE.SphereGeometry(0.065, 12, 8), 0, 0.88, 0)
+  ], batonGlow)
+  const batonLight = new THREE.PointLight(0xff5a18, 0, 4.5, 2)
+  batonLight.position.y = 0.62
+  evacuationBaton.add(batonHandle, batonSignal, batonLight)
+  evacuationBaton.visible = false
+  root.add(evacuationBaton)
   const pack = new THREE.Group(); pack.name = 'power-pack'; pack.position.set(-0.08, 1.32, -0.34)
-  const packCase = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.43, 0.14), jointMaterial)
-  const packRail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.025, 0.02), accentMaterial); packRail.position.z = -0.08; packRail.position.y = 0.08
+  const packCase = mergedMesh([
+    new RoundedBoxGeometry(0.27, 0.39, 0.13, 1, 0.035),
+    translatedGeometry(new THREE.CylinderGeometry(0.045, 0.045, 0.31, 10), 0, 0, -0.095),
+    translatedGeometry(new THREE.CylinderGeometry(0.045, 0.045, 0.31, 10), 0, 0, 0.095)
+  ], jointMaterial)
+  const packRail = new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.028, 0.024, 1, 0.008), accentMaterial); packRail.position.z = -0.08; packRail.position.y = 0.08
   pack.add(packCase, packRail); root.add(pack)
   root.traverse((object) => { if (object instanceof THREE.Mesh) object.castShadow = true })
-  return { root, torso, head, leftArm, rightArm, leftLeg, rightLeg, status, medicalKit, visualPosition: new THREE.Vector3(), visualYaw: 0, initialized: false }
+  return { root, torso, head, leftArm, rightArm, leftLeg, rightLeg, status, medicalKit, evacuationBaton, batonGlow, batonLight, visualPosition: new THREE.Vector3(), visualYaw: 0, initialized: false }
 }
 
 export class HumanoidRenderer {
@@ -165,13 +286,15 @@ export class HumanoidRenderer {
       const rightFoot = humanoidFootTarget(pose.phase, pose.animation === 1 ? pose.speed : 0, true)
       applyLegIk(rig.leftLeg, [leftFoot.forward, leftFoot.height, -0.16], -1)
       applyLegIk(rig.rightLeg, [rightFoot.forward, rightFoot.height, 0.16], 1)
-      rig.leftArm.root.rotation.set(0, 0, -walk * 0.34)
-      rig.rightArm.root.rotation.set(0, 0, walk * 0.34)
-      rig.leftArm.lower.rotation.set(0, 0, -0.18)
-      rig.rightArm.lower.rotation.set(0, 0, -0.18)
+      rig.leftArm.root.rotation.set(-0.045 * pace, 0, -walk * 0.34)
+      rig.rightArm.root.rotation.set(0.045 * pace, 0, walk * 0.34)
+      const elbowFlex = -0.24 - Math.abs(walk) * 0.1
+      rig.leftArm.lower.rotation.set(0, 0, elbowFlex)
+      rig.rightArm.lower.rotation.set(0, 0, elbowFlex)
       const supportSway = (leftFoot.stance ? -1 : 1) * Math.sin(cycle) * 0.018 * Math.min(1, pace)
       rig.torso.rotation.set(supportSway, 0, pace > 0 ? -0.025 * Math.min(1, pace) : 0)
       rig.head.rotation.set(0, 0, 0)
+      rig.head.rotation.x = -supportSway * 0.55
       rig.head.rotation.y = pose.animation === 4 ? Math.sin(pose.phase * Math.PI * 4) * 0.26 : 0
       rig.torso.rotation.z = pose.animation === 4 ? -0.08 : 0
       const carryingMedicalKit = pose.auxB > 0.5
@@ -228,6 +351,24 @@ export class HumanoidRenderer {
         rig.leftArm.lower.rotation.z = -0.45 * report
         rig.head.rotation.y = 0.25 * report
       }
+      const evacuationGuide = (pose.flags & PoseFlags.EVACUATION_GUIDE) !== 0
+      rig.evacuationBaton.visible = evacuationGuide
+      if (evacuationGuide) {
+        const signal = now / 1_000 * 4.6 + entity.index * 1.7
+        const wave = Math.sin(signal)
+        const handTarget: Vec3Tuple = [0.28, 1.33, 0.48]
+        rig.evacuationBaton.position.set(...handTarget)
+        rig.evacuationBaton.rotation.set(wave * 0.08, 0, -0.12 + wave * 0.16)
+        applyArmIk(rig.rightArm, handTarget, 1, 1)
+        // The free arm points toward the safe flow while the lit baton remains
+        // high enough to read above an evacuating crowd.
+        applyArmIk(rig.leftArm, [0.34, 1.24, -0.48], 0.88, -1)
+        const pulse = 0.68 + 0.32 * Math.sin(signal * 2.25)
+        rig.batonGlow.emissiveIntensity = 3.4 + pulse * 2.2
+        rig.batonLight.intensity = 1.8 + pulse * 2.6
+      } else {
+        rig.batonLight.intensity = 0
+      }
       const emergency = (pose.flags & PoseFlags.EMERGENCY) !== 0
       const controlled = (pose.flags & PoseFlags.RMF_CONTROLLED) !== 0
       const safeStop = (pose.flags & PoseFlags.SAFE_STOP) !== 0
@@ -241,6 +382,7 @@ export class HumanoidRenderer {
       rig.root.traverse((object) => {
         if (object instanceof THREE.Mesh) object.geometry.dispose()
       })
+      rig.batonGlow.dispose()
     }
   }
 }

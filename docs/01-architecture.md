@@ -10,7 +10,7 @@
 | UI(HUD) | React 19 + zustand 5 + CSS | 패널/버튼/타임라인 등 저빈도 UI만 담당 |
 | 스키마 | zod 4 | 레이아웃·시나리오 JSON 검증, 타입 추론 |
 | 테스트 | vitest | 시뮬레이션 코어는 DOM 없이 순수 로직 → 테스트 용이 |
-| 스타일 | Tailwind CSS | HUD 전용 |
+| 스타일 | 단일 CSS (`src/styles/index.css`) | HUD 전용, 런타임 CSS 프레임워크 없음 |
 
 독립 시연은 **서버 없음**으로 동작한다. 이전 프로젝트의 자체 권위 gateway는 폐기하고
 시뮬레이션은 브라우저 안의 Web Worker에서 실행한다. 실제 Open-RMF 연계 시에만 ROS/RMF의

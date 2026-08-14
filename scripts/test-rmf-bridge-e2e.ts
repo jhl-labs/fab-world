@@ -270,10 +270,10 @@ try {
       ).waitFor({ timeout: 3_000 })
     }
   }
-  await page.locator(
-    '.mission-proof[data-action-telemetry-fresh="true"][data-action-telemetry-phase="verified"]' +
-    '[data-valve-position="1"][data-hand-pose-measured="true"]'
-  ).waitFor({ timeout: 5_000 })
+  // The action-stage safety gate accepts verified telemetry only while its
+  // 1.5-second heartbeat is fresh. Submit the executor callback immediately;
+  // waiting for a software-rendered browser frame first can age out valid
+  // telemetry even though the Bridge accepted and broadcast it.
   const verified = await fetch(`http://127.0.0.1:${bridge.port}/ingest/action-stage`, {
     method: 'POST',
     headers: {
@@ -288,11 +288,16 @@ try {
       timestamp: telemetryBase + telemetrySamples.length
     })
   })
-  assert.equal(verified.status, 202)
+  const verifiedBody = await verified.json() as Record<string, unknown>
+  assert.equal(verified.status, 202, `Verified action stage was rejected: ${JSON.stringify(verifiedBody)}`)
+  await page.locator(
+    '.mission-proof[data-action-telemetry-phase="verified"]' +
+    '[data-valve-position="1"][data-hand-pose-measured="true"]'
+  ).waitFor({ timeout: 5_000 })
   await page.locator('.mission-impact[data-verified-gates="1"]').waitFor({ timeout: 5_000 })
   await page.locator('.mission-proof[data-valve-contact="true"][data-valve-closed="true"][data-sensor-verified="true"]').waitFor({ timeout: 5_000 })
   assert.equal(await page.locator('.proof-step.complete').count(), 4, 'All four mission evidence gates must be complete')
-  await page.locator('.task-list > div').filter({ hasText: '가스 격리' }).locator('b').filter({ hasText: '완료' }).waitFor({ timeout: 5_000 })
+  await page.locator('.task-list > div').filter({ hasText: '가스 격리' }).locator('b').filter({ hasText: '완료' }).waitFor({ timeout: 15_000 })
   const authoritySnapshot = await readAuthoritySnapshot(`${bridge.url}?token=${token}`)
   const gasTaskSnapshot = authoritySnapshot.filter((event) =>
     event.type === 'task_state' && event.taskId === gasTaskId
@@ -374,7 +379,7 @@ function createBrowserE2eRmfApi(): RmfApi & {
     const stage = dispatchedCategory === 'gas_isolation'
       ? !gasInteractionReleased
         ? 'observing'
-        : gasElapsed < 5_500 ? 'interacting' : gasElapsed < 6_000 ? 'reporting' : 'completed'
+        : gasElapsed < 12_000 ? 'interacting' : gasElapsed < 13_000 ? 'reporting' : 'completed'
       : elapsed < 350 ? 'observing' : elapsed < 700 ? 'interacting' : elapsed < 1_050 ? 'reporting' : 'completed'
     const completed = stage === 'completed'
     return {

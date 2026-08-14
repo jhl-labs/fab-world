@@ -56,6 +56,7 @@ export interface SimEntity {
   status: AgentStatus; behavior: EmergencyBehavior; targetX: number; targetZ: number
   targetIndex: number; route: number[]; routeCursor: number; targetDelay: number; animation: number; animationPhase: number
   emergency: boolean; mission?: string
+  evacuationGuiding?: boolean
   missionActivity?: 'enroute' | 'inspecting' | 'reporting' | 'complete'
   missionActivityStartedAt?: number
   activity?: HumanoidActivity
@@ -74,9 +75,15 @@ export interface SimEntity {
   yieldResumeGoalZ?: number
   evacuationMusterId?: string
   evacuationSlotIndex?: number
+  avoidanceObstacleId?: string
+  avoidanceX?: number
+  avoidanceZ?: number
+  navigationBestDistance?: number
+  navigationLastProgressAt?: number
   formationBestDistance?: number
   formationLastProgressAt?: number
   formationReassignments?: number
+  formationAvoidedSlotIndices?: number[]
   taskId?: string
   goalX: number; goalZ: number; homeX: number; homeZ: number
   auxA: number; auxB: number; rmfControlled: boolean; battery: number

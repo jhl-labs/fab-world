@@ -147,6 +147,13 @@ Bridge가 loopback 이외의 인터페이스(`0.0.0.0` 포함)에 바인딩될 �
 인증을 대체하지 않으며, 운영에서는 TLS와 네트워크 정책으로 `/healthz`, `/readyz` 접근 범위도
 제한한다.
 
+production build는 meta CSP를 주입하고 정적 UI는 `no-referrer`를 기본값으로 제공한다. Vite
+개발/preview는 CSP, `frame-ancestors 'none'`, COOP/COEP, `nosniff`, 카메라·마이크·위치정보 차단
+헤더를 함께 보낸다. 개발 서버만 React HMR 초기화에 필요한 inline script를 허용한다.
+실제 CDN/Ingress는 meta 태그에 의존하지 말고 같은 정책을 HTTP 응답 헤더로 설정한다. 원격 trace를
+사용하므로 `connect-src`는 HTTPS와 WSS를 허용하지만 script/font/object는 self 또는 차단 상태를
+유지한다. UI 폰트는 시스템 폰트만 사용해 Google Fonts 연결을 요구하지 않는다.
+
 ### 3.1 현장 trace 기록과 폴백 재생
 
 Bridge가 보내는 정규화 이벤트는 category별 재생 template로 기록할 수 있다. 기록 중 실제

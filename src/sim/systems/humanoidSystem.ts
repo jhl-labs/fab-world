@@ -1,5 +1,6 @@
 import type { HumanoidActivity, HumanoidTaskStatus } from '../../core/schema'
 import { GAS_WORK_ZONE_RADIUS } from '../../core/interactionGeometry'
+import { circleIntersectsObstacle } from '../../core/layout'
 import type { SimWorld } from '../world'
 import type { HumanoidTaskRuntime, SimEntity } from '../types'
 
@@ -55,7 +56,13 @@ export function requestOperatorClearance(world: SimWorld, task: HumanoidTaskRunt
   if (task.kind === 'medical_support') return true
   if (task.operatorClearanceConfirmed) return true
   if (task.yieldingPersonId) return false
-  const operator = world.entities
+  const reservedOperator = world.entities.find((entity) =>
+    entity.kind === 'person' &&
+    entity.workReservationTaskId === task.id &&
+    entity.behavior === 'normal' &&
+    !entity.emergency
+  )
+  const operator = reservedOperator ?? world.entities
     .filter((entity) =>
       entity.kind === 'person' &&
       entity.role !== 'responder' &&
@@ -65,7 +72,12 @@ export function requestOperatorClearance(world: SimWorld, task: HumanoidTaskRunt
     .sort((a, b) => Math.hypot(a.x - robot.x, a.z - robot.z) - Math.hypot(b.x - robot.x, b.z - robot.z))[0]
   if (!operator) return true
   const distance = Math.hypot(operator.x - robot.x, operator.z - robot.z)
-  if (distance > 5) return true
+  // An unrelated distant worker is not part of this handoff. A specifically
+  // reserved operator is: if collision-aware routing kept that operator well
+  // outside the work envelope, record the already-safe handoff instead of
+  // silently dropping the clearance evidence when an external RMF task moves
+  // on to its next state.
+  if (distance > 5 && (!reservedOperator || !robot.rmfControlled)) return true
   operator.workReservationTaskId = undefined
   task.operatorYielded = true
   if (distance >= 2.4) {
@@ -122,14 +134,9 @@ function chooseClearancePoint(world: SimWorld, robot: SimEntity, awayX: number, 
 }
 
 function isClearOfEquipment(world: SimWorld, x: number, z: number): boolean {
-  return world.layout.layout.bays.every((bay) => bay.equipment.every((equipment) => {
-    const width = equipment.type === 'lithography' ? 4.6 : equipment.type === 'cmp' ? 5 : 3.5
-    const depth = 4.2
-    const quarterTurn = Math.abs(Math.sin(equipment.rotation)) > 0.7
-    const halfWidth = (quarterTurn ? depth : width) / 2 + 0.55
-    const halfDepth = (quarterTurn ? width : depth) / 2 + 0.55
-    return Math.abs(x - equipment.position[0]) > halfWidth || Math.abs(z - equipment.position[2]) > halfDepth
-  }))
+  return world.layout.groundObstacleIndex.aroundPoint(x, z, 0.55)
+    .filter((obstacle) => obstacle.kind === 'equipment')
+    .every((obstacle) => !circleIntersectsObstacle(x, z, 0.55, obstacle))
 }
 
 export function gasWorkZonePeople(world: SimWorld, task: HumanoidTaskRuntime): SimEntity[] {
@@ -215,7 +222,7 @@ function updateTask(world: SimWorld, task: HumanoidTaskRuntime): void {
           break
         }
       }
-      const duration = task.kind === 'gas_isolation' ? 7 : 4
+      const duration = task.kind === 'gas_isolation' ? 9 : 4
       robot.auxA = Math.min(1, elapsed / (task.kind === 'medical_support' ? 0.8 : duration))
       if (task.kind === 'gas_isolation') updateGasIsolation(world, task, robot, elapsed)
       if (task.kind === 'medical_support' && !task.medicalHandoffEmitted && elapsed >= 0.8) {
@@ -255,7 +262,7 @@ function updateTask(world: SimWorld, task: HumanoidTaskRuntime): void {
       if (Math.hypot(robot.x - robot.homeX, robot.z - robot.homeZ) < 1.2) {
         setStatus(world, task, 'completed')
         robot.taskId = undefined; robot.activity = 'standby'; robot.speed = 0; robot.auxA = 0; robot.auxB = 0
-        if (task.kind === 'inspection_round') robot.maxSpeed = robot.preferredSpeed
+        robot.maxSpeed = robot.preferredSpeed
         world.completedHumanoidTasks++
       }
       break
@@ -297,7 +304,7 @@ function updateGasIsolation(world: SimWorld, task: HumanoidTaskRuntime, robot: S
     })
     emitGasSensorMonitoring(world, task, robot)
   }
-  if (!task.gasIsolationVerified && elapsed >= 6.2) {
+  if (!task.gasIsolationVerified && elapsed >= 8.2) {
     task.gasIsolationVerified = true
     task.gasIsolationVerifiedAt = world.simTime
     world.gasIsolationElapsed = Math.max(0, world.simTime - world.emergency.startedAt)
@@ -499,7 +506,11 @@ export function confirmMedicalHandoff(
 export function updateHumanoids(world: SimWorld): void {
   world.assignQueuedHumanoidTasks()
   for (const robot of world.entities.filter((entity) => entity.kind === 'humanoid' && entity.activity === 'yielding' && entity.behavior === 'yield')) {
-    if (Math.hypot(robot.x - robot.goalX, robot.z - robot.goalZ) >= 1.2) continue
+    // Failure retreat nodes are at least 4m from the valve. A parked vehicle
+    // may keep the body centre just outside the generic 1.2m waypoint radius;
+    // 1.4m still proves more than 2.5m of withdrawal while allowing a safe
+    // stop beside, rather than through, that vehicle.
+    if (Math.hypot(robot.x - robot.goalX, robot.z - robot.goalZ) >= 1.4) continue
     robot.activity = 'safeStop'
     robot.speed = 0
     robot.status = 'waiting'

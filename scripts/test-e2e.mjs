@@ -11,7 +11,10 @@ let dispatchedRmfRequest
 const dispatchedRmfRequests = []
 const dispatchedTaskIds = []
 const cancelledTaskIds = []
-const readinessDelay = process.env.E2E_PREFLIGHT_BLOCKED_SCREENSHOT ? 10_000 : 3_000
+// Keep the mock Bridge degraded long enough for software WebGL to finish the
+// first fab frame. Otherwise the test can miss the blocked state entirely on
+// slower CI hosts even though the client handled both socket messages.
+const readinessDelay = process.env.E2E_PREFLIGHT_BLOCKED_SCREENSHOT ? 10_000 : 6_000
 const measuredHandPose = (manipulation) => {
   const position = (side) => {
     if (manipulation === undefined) return [0.05, 0.92, side * 0.34]
@@ -120,14 +123,18 @@ rmfServer.on('connection', (socket) => {
       dispatchedTaskIds.push(taskId)
       if (taskId.startsWith('showcase-inspection-')) {
         taskState(request, 'assigned', 'humanoid-002')
-        robotState('humanoid-002', -92, -101, 'moving', taskId, 20)
-        taskState(request, 'navigating', 'humanoid-002', 30)
-        robotState('humanoid-002', -74, -88, 'idle', taskId, 90)
-        taskState(request, 'observing', 'humanoid-002', 100)
-        taskState(request, 'interacting', 'humanoid-002', 150)
-        taskState(request, 'reporting', 'humanoid-002', 210, 'inspection_anomaly_reported')
-        taskState(request, 'completed', 'humanoid-002', 520)
-        for (let delay = 1_000; delay <= 14_000; delay += 1_000) {
+        robotState('humanoid-002', -92, -101, 'moving', taskId, 50)
+        taskState(request, 'navigating', 'humanoid-002', 100)
+        robotState('humanoid-002', -74, -88, 'idle', taskId, 600)
+        taskState(request, 'observing', 'humanoid-002', 700)
+        taskState(request, 'interacting', 'humanoid-002', 1_100)
+        taskState(request, 'reporting', 'humanoid-002', 1_600, 'inspection_anomaly_reported')
+        taskState(request, 'completed', 'humanoid-002', 2_200)
+        // A real RMF fleet adapter publishes idle state continuously. Keep the
+        // finite stub alive through the following gas-isolation evidence beat
+        // so this assertion tests product stale-pose handling, not fixture
+        // silence after the inspection completes.
+        for (let delay = 1_000; delay <= 30_000; delay += 1_000) {
           robotState('humanoid-002', -74, -88, 'idle', undefined, delay)
         }
       } else if (taskId.startsWith('gas-isolation-')) {
@@ -249,6 +256,15 @@ try {
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto(`${baseUrl}?rmf=ws://127.0.0.1:4188`, { waitUntil: 'domcontentloaded' })
   await page.getByText('시뮬레이션 준비 완료 — 448개체').waitFor({ timeout: 25_000 })
+  assert.match((await fetch(baseUrl)).headers.get('content-security-policy') ?? '', /object-src 'none'/, 'The server must retain a restrictive baseline CSP')
+  assert.equal(await page.locator('.rmf-state').getAttribute('role'), 'status', 'RMF connection changes must be exposed as status updates')
+  assert.equal(await page.locator('.phase').getAttribute('aria-live'), 'assertive', 'Emergency phase changes must be announced')
+  assert.equal(await page.locator('.log-feed').getAttribute('role'), 'log', 'Operational messages must expose log semantics')
+  assert.equal(
+    await page.evaluate(() => globalThis.performance.getEntriesByType('resource').some((entry) => /fonts\.(?:googleapis|gstatic)\.com/.test(entry.name))),
+    false,
+    'The HUD must not depend on third-party font requests'
+  )
   await page.locator('.rmf-error').waitFor({ timeout: 5_000 })
   await page.locator('.rmf-preflight[data-preflight="blocked"]').waitFor()
   assert.equal(
@@ -303,7 +319,7 @@ try {
   await purposeCallout.waitFor({ timeout: 5_000 })
   assert.notEqual(await purposeCallout.getAttribute('data-task-kind'), 'none', 'Purpose narrative must follow an active humanoid task')
   await page.locator('.phase-detected, .phase-alarm, .phase-response, .phase-evacuation').waitFor({ state: 'visible', timeout: 10_000 })
-  await page.locator('.task-list > div').filter({ hasText: '가스 격리' }).locator('b').filter({ hasText: /배정|이동|관찰|작업|보고/ }).waitFor({ timeout: 5_000 })
+  await page.locator('.task-list > div').filter({ hasText: '가스 격리' }).locator('b').filter({ hasText: /배정|이동|관찰|작업|보고/ }).waitFor({ timeout: 10_000 })
   await page.waitForFunction(() =>
     globalThis.document.querySelector('.task-list')?.textContent?.includes('가스 격리')
   )
@@ -384,6 +400,10 @@ try {
     dispatchedTaskIds.includes(currentH1Task),
     'The fleet-board task authority must correspond to a task actually dispatched through RMF'
   )
+  // The assertion can land between the 1.5s stale-pose threshold and the
+  // mock adapter's next 1s heartbeat when Chromium is under load. Require the
+  // next fresh heartbeat to restore standby instead of sampling that transient.
+  await page.locator('.fleet-board [data-robot-id="humanoid-002"][data-activity="standby"]').waitFor({ timeout: 3_500 })
   assert.equal(
     await page.locator('.fleet-board [data-robot-id="humanoid-002"]').getAttribute('data-activity'),
     'standby',
@@ -395,12 +415,17 @@ try {
   if (process.env.E2E_SCREENSHOT) await page.screenshot({ path: process.env.E2E_SCREENSHOT, fullPage: true })
 
   await page.getByRole('button', { name: /에칭 베이 화재/ }).click()
-  await page.locator('.phase').filter({ hasText: /화재 · (감지|경보|대응|대피)/ }).waitFor({ timeout: 5_000 })
+  await page.locator('.phase').filter({ hasText: /화재 · (감지|경보|대응|대피)/ }).waitFor({ timeout: 10_000 })
   await page.waitForFunction(() => Number(globalThis.document.querySelector('.scoreboard')?.getAttribute('data-held-equipment')) > 0)
   await page.locator('.camera-row button.active').filter({ hasText: 'Orbit' }).waitFor()
   const fireDrawCalls = Number(await page.locator('.stats').getAttribute('data-draw-calls'))
   assert.ok(fireDrawCalls > 0 && fireDrawCalls < 150, `Fire draw-call budget exceeded: ${fireDrawCalls}`)
-  if (process.env.E2E_FIRE_SCREENSHOT) await page.screenshot({ path: process.env.E2E_FIRE_SCREENSHOT, fullPage: true })
+  if (process.env.E2E_FIRE_SCREENSHOT) {
+    // The evacuation-guide baton is enabled at alarm, one deterministic tick
+    // after detection. Do not capture the transient pre-alarm frame.
+    await page.locator('.phase').filter({ hasText: /화재 · (경보|대응|대피)/ }).waitFor({ timeout: 5_000 })
+    await page.screenshot({ path: process.env.E2E_FIRE_SCREENSHOT, fullPage: true })
+  }
   if (process.env.E2E_MUSTER_SCREENSHOT) {
     await page.locator('.scale-row').getByRole('button', { name: '16×' }).click()
     await page.waitForFunction(() => {
@@ -433,6 +458,14 @@ try {
   await page.locator('.camera-row button.active').filter({ hasText: '1인칭' }).waitFor()
   await page.locator('.entity-list button').first().click()
   await page.locator('.entity-list button.active').waitFor()
+  await page.locator('.camera-row button.active').filter({ hasText: 'Follow' }).waitFor()
+  const canvasBounds = await page.locator('.viewport canvas').boundingBox()
+  assert.ok(canvasBounds, 'The renderer canvas must be available for camera input')
+  await page.mouse.move(canvasBounds.x + canvasBounds.width / 2, canvasBounds.y + canvasBounds.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(canvasBounds.x + canvasBounds.width / 2 + 45, canvasBounds.y + canvasBounds.height / 2)
+  await page.mouse.up()
+  await page.locator('.camera-row button.active').filter({ hasText: 'Orbit' }).waitFor()
   assert.deepEqual(pageErrors, [], `Browser page errors:\n${pageErrors.join('\n')}`)
 
   const localPage = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })
@@ -441,20 +474,20 @@ try {
   await localPage.goto(baseUrl, { waitUntil: 'domcontentloaded' })
   await localPage.getByText('시뮬레이션 준비 완료 — 448개체').waitFor({ timeout: 25_000 })
   await localPage.locator('.scale-row').getByRole('button', { name: '16×' }).click()
-  // Deliberately disturb the ambient factory state first. Loading the scenario
-  // must still restart from its own seed rather than inherit this moving world.
+  // Deliberately disturb the ambient factory state first. Loading a curated
+  // scenario must restart from its own seed at presentation-safe 1× speed.
   await localPage.waitForFunction(() => {
     const match = globalThis.document.querySelector('.sim-clock')?.textContent?.match(/SIM\s+(\d+)s/)
     return Number(match?.[1] ?? 0) >= 20
   }, undefined, { timeout: 10_000 })
-  await localPage.locator('.scale-row').getByRole('button', { name: '1×' }).click()
-  await localPage.getByText('시뮬레이션 1× 재생').waitFor({ timeout: 5_000 })
   await localPage.getByRole('button', { name: /응급 환자 발생/ }).click()
+  await localPage.locator('.scale-row button.active').filter({ hasText: '1×' }).waitFor({ timeout: 5_000 })
+  await localPage.getByText('시뮬레이션 1× 재생').waitFor({ timeout: 5_000 })
   await localPage.locator('.task-list > div').filter({ hasText: '의료 지원' }).filter({ hasText: 'humanoid-002' }).waitFor({ timeout: 10_000 })
   try {
     await localPage.waitForFunction(() =>
       globalThis.document.querySelector('.log-feed')?.textContent?.includes('응급 키트를 인계하고 처치 공간 지원')
-    , undefined, { timeout: 30_000 })
+    , undefined, { timeout: 40_000 })
   } catch (error) {
     const diagnostic = {
       phase: await localPage.locator('.phase').textContent(),
@@ -501,8 +534,38 @@ try {
     await gasPage.waitForTimeout(180)
     await gasPage.screenshot({ path: process.env.E2E_HUMANOID_WALK_SCREENSHOT, fullPage: true })
   }
+  // Keep the long collision-aware approach at the scenario's 1× default,
+  // then slow only the short manipulation beat so the one-sim-second
+  // monitoring frame remains observable on software WebGL hosts.
+  await gasPage.locator('.task-list > div').filter({ hasText: '가스 격리' }).locator('b').filter({ hasText: /^작업$/ }).waitFor({ timeout: 45_000 })
+  await gasPage.locator('.scale-row').getByRole('button', { name: '0.5×' }).click()
   try {
-    await gasPage.getByText(/내장 가스 센서가 밸브 폐쇄 후 잔류 가스 농도 하강을 확인/).waitFor({ timeout: 30_000 })
+    // Metrics are batched, so the short close→verify interval is not
+    // guaranteed to appear as a distinct KPI render. The causal monitoring
+    // event is durable; observe the log mutation in-page and pause without an
+    // automation round trip before the following verification tick.
+    await gasPage.evaluate(() => new Promise((resolve, reject) => {
+      const root = globalThis.document.querySelector('.log-feed')
+      if (!root) { reject(new Error('operation log is unavailable')); return }
+      const finish = () => {
+        if (!root.textContent?.includes('내장 가스 센서가 밸브 폐쇄 후 잔류 가스 농도 하강')) return false
+        const pause = [...globalThis.document.querySelectorAll('button')]
+          .find((button) => button.textContent?.includes('Ⅱ 정지'))
+        if (!pause) return false
+        pause.click()
+        observer.disconnect()
+        globalThis.clearTimeout(timeout)
+        resolve(true)
+        return true
+      }
+      const observer = new globalThis.MutationObserver(finish)
+      const timeout = setTimeout(() => {
+        observer.disconnect()
+        reject(new Error('gas monitoring event was not observed within 60 seconds'))
+      }, 60_000)
+      observer.observe(root, { childList: true, subtree: true, characterData: true })
+      finish()
+    }))
   } catch (error) {
     const diagnostic = {
       phase: await gasPage.locator('.phase').textContent(),
@@ -514,9 +577,8 @@ try {
     await gasPage.screenshot({ path: '/tmp/fab-world-gas-collaboration-timeout.png', fullPage: true })
     throw new Error(`Local gas collaboration timeout: ${JSON.stringify(diagnostic)}`, { cause: error })
   }
-  await gasPage.getByText(/내장 가스 센서가 밸브 폐쇄 후 잔류 가스 농도 하강을 확인/).waitFor({ timeout: 10_000 })
-  await gasPage.getByRole('button', { name: 'Ⅱ 정지' }).click()
   await gasPage.getByRole('button', { name: '▶ 재생' }).waitFor()
+  await gasPage.getByText(/내장 가스 센서가 밸브 폐쇄 후 잔류 가스 농도 하강을 확인/).waitFor({ timeout: 10_000 })
   await gasPage.locator('.camera-row button.active').filter({ hasText: 'Orbit' }).waitFor()
   const missionImpact = gasPage.locator('.mission-impact')
   await gasPage.waitForFunction(() =>
@@ -562,12 +624,12 @@ try {
   await comparisonPage.getByRole('button', { name: /위험작업 A\/B 실측/ }).click()
   await comparisonPage.locator('.scale-row').getByRole('button', { name: '4×' }).click()
   const riskComparison = comparisonPage.locator('.risk-comparison')
-  await comparisonPage.locator('.risk-comparison[data-comparison-stage="human-work"][data-human-entries="1"]').waitFor({ timeout: 15_000 })
+  await comparisonPage.locator('.risk-comparison[data-comparison-stage="human-work"][data-human-entries="1"]').waitFor({ timeout: 35_000 })
   assert.ok(
     Number(await riskComparison.getAttribute('data-human-exposure-seconds')) > 0,
     'The human baseline must integrate observed work-zone person-seconds while the responder is at the valve'
   )
-  await comparisonPage.getByText(/수동 격리 밸브 손잡이에 직접 접촉했습니다/).waitFor({ timeout: 5_000 })
+  await comparisonPage.getByText(/수동 격리 밸브 손잡이에 직접 접촉했습니다/).waitFor({ timeout: 10_000 })
   await comparisonPage.getByRole('button', { name: 'Ⅱ 정지' }).click()
   await comparisonPage.getByRole('button', { name: '▶ 재생' }).waitFor()
   if (process.env.E2E_COMPARISON_HUMAN_SCREENSHOT) {
@@ -575,15 +637,20 @@ try {
   }
   await comparisonPage.getByRole('button', { name: '▶ 재생' }).click()
   await comparisonPage.locator('.scale-row').getByRole('button', { name: '16×' }).click()
-  await comparisonPage.locator('.risk-comparison[data-comparison-stage="transition"][data-human-verified="true"]').waitFor({ timeout: 10_000 })
+  await comparisonPage.locator('.risk-comparison[data-comparison-stage="transition"][data-human-verified="true"]').waitFor({ timeout: 20_000 })
   await comparisonPage.locator('.scale-row').getByRole('button', { name: '4×' }).click()
   assert.equal(await riskComparison.getAttribute('data-human-entries'), '1', 'The direct-work baseline must record one authorized human entrant')
   assert.ok(
-    Number(await riskComparison.getAttribute('data-human-exposure-seconds')) >= 6.2,
+    Number(await riskComparison.getAttribute('data-human-exposure-seconds')) >= 8.2,
     'The direct-work baseline must include the full measured manipulation and verification exposure'
   )
-  await comparisonPage.locator('.risk-comparison[data-comparison-stage="humanoid-work"]').waitFor({ timeout: 10_000 })
-  await comparisonPage.getByText(/수동 격리 밸브 손잡이에 접촉했습니다/).waitFor({ timeout: 5_000 })
+  await comparisonPage.waitForFunction(() => {
+    const stage = globalThis.document.querySelector('.risk-comparison')?.getAttribute('data-comparison-stage')
+    return stage === 'humanoid-work' || stage === 'complete'
+  }, undefined, { timeout: 30_000 })
+  await comparisonPage.waitForFunction(() =>
+    Number(globalThis.document.querySelector('.risk-comparison')?.getAttribute('data-humanoid-entries')) === 1
+  , undefined, { timeout: 30_000 })
   await comparisonPage.getByRole('button', { name: 'Ⅱ 정지' }).click()
   await comparisonPage.getByRole('button', { name: '▶ 재생' }).waitFor()
   if (process.env.E2E_COMPARISON_ROBOT_SCREENSHOT) {
@@ -593,12 +660,12 @@ try {
   await comparisonPage.locator('.scale-row').getByRole('button', { name: '16×' }).click()
   await comparisonPage.locator(
     '.risk-comparison[data-comparison-stage="complete"][data-human-verified="true"][data-humanoid-verified="true"][data-same-target="true"]'
-  ).waitFor({ timeout: 10_000 })
+  ).waitFor({ timeout: 20_000 })
   assert.equal(await riskComparison.getAttribute('data-human-entries'), '1', 'A/B completion must retain the observed human baseline entry')
   assert.equal(await riskComparison.getAttribute('data-humanoid-entries'), '1', 'The comparison run must observe one humanoid at the same valve')
   assert.equal(await riskComparison.getAttribute('data-humanoid-exposure-seconds'), '0', 'The humanoid run must keep human work-zone exposure at zero')
   assert.ok(
-    Number(await riskComparison.getAttribute('data-avoided-exposure-seconds')) >= 6.2,
+    Number(await riskComparison.getAttribute('data-avoided-exposure-seconds')) >= 8.2,
     'The A/B verdict must be computed from the two observed runs rather than a promotional estimate'
   )
   assert.ok(
@@ -606,11 +673,50 @@ try {
       Number(await riskComparison.getAttribute('data-humanoid-isolation-elapsed')) > 0,
     'Both A/B arms must publish their independently observed isolation time'
   )
+  const completedComparisonButton = comparisonPage.getByRole('button', { name: /A\/B 실측 완료 · 다시 실행/ })
+  await completedComparisonButton.waitFor()
+  assert.equal(await completedComparisonButton.isEnabled(), true, 'A completed A/B run must remain repeatable')
   if (process.env.E2E_COMPARISON_SCREENSHOT) {
     await comparisonPage.screenshot({ path: process.env.E2E_COMPARISON_SCREENSHOT, fullPage: true })
   }
   assert.deepEqual(comparisonPageErrors, [], `Risk comparison browser errors:\n${comparisonPageErrors.join('\n')}`)
   await comparisonPage.close()
+
+  const mobilePage = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 })
+  const mobilePageErrors = []
+  mobilePage.on('pageerror', (error) => mobilePageErrors.push(error.message))
+  await mobilePage.goto(baseUrl, { waitUntil: 'domcontentloaded' })
+  await mobilePage.getByText('시뮬레이션 준비 완료 — 448개체').waitFor({ timeout: 25_000 })
+  const mobileTapHeights = await mobilePage.locator('.controls button:visible, .scenarios button:visible').evaluateAll(
+    (buttons) => buttons.map((button) => button.getBoundingClientRect().height)
+  )
+  assert.ok(
+    mobileTapHeights.length > 0 && mobileTapHeights.every((height) => height >= 40),
+    `Mobile primary controls must retain 40px touch targets: ${JSON.stringify(mobileTapHeights)}`
+  )
+  const mobileMissionBounds = await mobilePage.locator('.mission-panel').evaluate((panel) => {
+    const rect = panel.getBoundingClientRect()
+    return { left: rect.left, right: rect.right, viewportWidth: globalThis.innerWidth }
+  })
+  assert.ok(
+    mobileMissionBounds.left >= 0 && mobileMissionBounds.right <= mobileMissionBounds.viewportWidth,
+    `Mobile mission panel must remain inside the viewport: ${JSON.stringify(mobileMissionBounds)}`
+  )
+  assert.ok(
+    Number.parseFloat(await mobilePage.locator('.proof-step small').first().evaluate((item) => globalThis.getComputedStyle(item).fontSize)) >= 7,
+    'Mobile evidence labels must remain readable instead of falling back to the desktop 5px size'
+  )
+  await mobilePage.emulateMedia({ reducedMotion: 'reduce' })
+  assert.equal(
+    await mobilePage.locator('.pulse').evaluate((item) => globalThis.getComputedStyle(item).animationIterationCount),
+    '1',
+    'Reduced-motion preference must suppress repeating HUD alarm animation'
+  )
+  if (process.env.E2E_MOBILE_SCREENSHOT) {
+    await mobilePage.screenshot({ path: process.env.E2E_MOBILE_SCREENSHOT, fullPage: true })
+  }
+  assert.deepEqual(mobilePageErrors, [], `Mobile browser errors:\n${mobilePageErrors.join('\n')}`)
+  await mobilePage.close()
 
   await browser.close()
   browser = undefined

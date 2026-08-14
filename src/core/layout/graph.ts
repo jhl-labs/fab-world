@@ -60,7 +60,13 @@ export class NavGraph {
     }
     return nearest
   }
-  findPath(from: number, to: number, hazards: ReadonlyMap<string, HazardLevel> = new Map()): number[] {
+  findPath(
+    from: number,
+    to: number,
+    hazards: ReadonlyMap<string, HazardLevel> = new Map(),
+    blockedNodes: ReadonlySet<number> = new Set(),
+    nodePenalties: ReadonlyMap<number, number> = new Map()
+  ): number[] {
     if (from === to) return [from]
     const size = this.nodes.length
     const scores = new Float64Array(size); scores.fill(Infinity); scores[from] = 0
@@ -77,12 +83,13 @@ export class NavGraph {
       }
       closed[current] = 1
       for (const edge of this.edges[current]!) {
+        if (edge.to !== to && blockedNodes.has(edge.to)) continue
         const edgeHazard = edge.zoneId ? hazards.get(edge.zoneId) : undefined
         const fromHazard = this.nodes[current]!.zoneId ? hazards.get(this.nodes[current]!.zoneId!) : undefined
         const toHazard = this.nodes[edge.to]!.zoneId ? hazards.get(this.nodes[edge.to]!.zoneId!) : undefined
         if ((edgeHazard === 'danger' || toHazard === 'danger') && fromHazard !== 'danger') continue
         const multiplier = edgeHazard === 'danger' || toHazard === 'danger' ? 100 : edgeHazard === 'warning' || toHazard === 'warning' ? 10 : 1
-        const candidate = scores[current]! + edge.distance * multiplier
+        const candidate = scores[current]! + edge.distance * multiplier * (nodePenalties.get(edge.to) ?? 1)
         if (candidate < scores[edge.to]!) {
           scores[edge.to] = candidate; parents[edge.to] = current
           const heuristic = distance2([this.nodes[edge.to]!.x, this.nodes[edge.to]!.z], [this.nodes[to]!.x, this.nodes[to]!.z])

@@ -37,6 +37,8 @@ function spawnMany(world: SimWorld, kind: EntityKind, count: number, role?: SimE
     const randomNode = world.rng.int(0, graph.nodes.length)
     const node = kind === 'humanoid'
       ? graph.nodes[graph.nearest(startX, startZ)]!
+      : kind === 'agv' || kind === 'igv'
+        ? findUnoccupiedGroundVehicleNode(world, graph.nodes, randomNode, kind)
       : kind === 'person'
         ? station
           ? findNearestUnoccupiedPersonNode(world, graph.nodes, station[0], station[2])
@@ -63,6 +65,29 @@ function spawnMany(world: SimWorld, kind: EntityKind, count: number, role?: SimE
     }
     world.entities.push(entity)
   }
+}
+
+function findUnoccupiedGroundVehicleNode(
+  world: SimWorld,
+  nodes: Array<{ x: number; z: number }>,
+  start: number,
+  kind: 'agv' | 'igv'
+): { x: number; z: number } {
+  const radius = kind === 'igv' ? 0.96 : 0.64
+  const groundVehicles = world.entities.filter((entity) => entity.kind === 'agv' || entity.kind === 'igv')
+  const humanoidStations = world.layout.layout.population.humanoidStations
+  for (let offset = 0; offset < nodes.length; offset++) {
+    const node = nodes[(start + offset * 37) % nodes.length]!
+    if (!groundVehicles.every((vehicle) => {
+      const vehicleRadius = vehicle.kind === 'igv' ? 0.96 : 0.64
+      return Math.hypot(vehicle.x - node.x, vehicle.z - node.z) >= radius + vehicleRadius + 0.05
+    })) continue
+    if (!humanoidStations.every((station) =>
+      Math.hypot(station[0] - node.x, station[2] - node.z) >= radius + 0.28 + 0.4
+    )) continue
+    return node
+  }
+  return nodes[start]!
 }
 
 function buildPersonMotionProfile(index: number, role: SimEntity['role']): {

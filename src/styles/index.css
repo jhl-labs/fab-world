@@ -1,9 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap');
-
-:root { font-family: 'Space Grotesk', system-ui, sans-serif; color: #e9f0f7; background: #101821; font-synthesis: none; }
+:root { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e9f0f7; background: #101821; font-synthesis: none; }
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; min-width: 320px; height: 100%; margin: 0; overflow: hidden; }
-button { border: 0; color: inherit; font: inherit; cursor: pointer; }
+button { min-height: 28px; border: 0; color: inherit; font: inherit; cursor: pointer; touch-action: manipulation; }
 button:focus-visible { outline: 2px solid #8bd2ff; outline-offset: 2px; }
 .app-shell, .viewport { width: 100%; height: 100%; }.viewport { position: relative; }
 .viewport canvas { display: block; width: 100%; height: 100%; }
@@ -40,7 +38,18 @@ h1 { margin: 2px 0 0; color: #fff; font-size: 21px; line-height: 1; letter-spaci
 .log-feed { position: absolute; bottom: 42px; left: 290px; width: min(420px, calc(100vw - 600px)); display: grid; gap: 5px; }.log-feed div { padding: 7px 10px; border-left: 2px solid #4e91c3; background: rgb(10 20 31 / 72%); color: #bfd0dc; font: 10px 'DM Mono', monospace; backdrop-filter: blur(5px); }.log-feed .log-warning { border-color: #ffb020; color: #ffd287; }.log-feed .log-danger { border-color: #ff3b30; color: #ffaaa5; }
 .log-feed-compact { width: min(360px, calc(100vw - 650px)); }
 .help { position: absolute; inset: auto 0 0; padding: 12px 20px; color: #9bb0be; background: linear-gradient(0deg, rgb(8 15 23 / 86%), transparent); font: 9px 'DM Mono', monospace; letter-spacing: .04em; }
-.boot-screen { position: fixed; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center; background: #101821; color: #d8e8f3; }.boot-screen p { margin: 8px 0 0; font: 500 13px 'DM Mono', monospace; letter-spacing: .16em; }.boot-screen small { color: #7590a5; }.spinner { width: 36px; height: 36px; margin: auto; border: 2px solid #33556c; border-top-color: #8bd2ff; border-radius: 50%; animation: spin .8s linear infinite; }
+.boot-screen { position: fixed; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center; background: #101821; color: #d8e8f3; }.boot-screen p { margin: 8px 0 0; font: 500 13px 'DM Mono', monospace; letter-spacing: .16em; }.boot-screen small { color: #7590a5; }.boot-screen button { min-height: 38px; margin: 4px auto 0; padding: 8px 14px; border-color: #5688a8; color: #cceaff; background: #173044; }.spinner { width: 36px; height: 36px; margin: auto; border: 2px solid #33556c; border-top-color: #8bd2ff; border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } } @keyframes blink { 50% { opacity: .25; } }
 @media (max-width: 900px) { .entity-panel, .scoreboard { display: none; }.topbar { gap: 10px; }.stats { display: none; }.scenarios { width: 180px; }.controls { width: 180px; }.mission-panel { width: 220px; }.log-feed { left: 20px; width: calc(100vw - 40px); }.help { font-size: 7px; } }
 @media (max-width: 600px) { .topbar { height: 68px; gap: 6px; align-items: flex-start; padding: 10px 8px; }.topbar > div:first-child { display: none; }.rmf-state, .phase { padding: 6px; font-size: 8px; }.phase { margin-left: 0; }.controls, .scenarios { top: 72px; width: calc(50vw - 12px); padding: 9px; }.controls { left: 8px; }.scenarios { right: 8px; }.mission-panel { top: 310px; left: 8px; width: calc(100vw - 16px); max-height: calc(100vh - 350px); padding: 10px; }.log-feed { left: 8px; width: calc(100vw - 16px); }.help { display: none; } }
+@media (max-width: 600px) {
+  .panel button { min-height: 40px; }
+  .mission-panel { top: 300px; max-height: calc(100dvh - 340px); }
+  .mission-proof-title, .comparison-title { font-size: 9px; }
+  .mission-proof-title b, .comparison-title b, .comparison-contract, .comparison-verdict { font-size: 8px; }
+  .proof-step em, .proof-step strong, .proof-step small, .action-telemetry span, .action-telemetry small, .mission-origin em, .mission-origin small, .comparison-grid em, .comparison-grid span i { font-size: 7px; }
+  .action-telemetry b, .mission-origin strong, .comparison-grid > article > strong, .comparison-grid span b { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

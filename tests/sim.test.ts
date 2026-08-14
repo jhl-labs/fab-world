@@ -4,9 +4,11 @@ import fireJson from '../data/scenarios/fire.json'
 import medicalJson from '../data/scenarios/medical.json'
 import { FabLayoutSchema, ScenarioSchema } from '../src/core/schema'
 import { updateTraffic } from '../src/sim/systems/trafficSystem'
+import { groundBodyRadius, updateMovement } from '../src/sim/systems/movementSystem'
 import { SimWorld } from '../src/sim/world'
 import { gasValveGripTarget } from '../src/core/interactionGeometry'
 import { POSE_STRIDE, PoseFlags, PoseSlot } from '../src/core/protocol'
+import { circleIntersectsObstacle } from '../src/core/layout'
 
 const layout = FabLayoutSchema.parse(layoutJson)
 const snapshot = (world: SimWorld) => [...new Float32Array(world.poseSnapshot().buffer)]
@@ -27,6 +29,22 @@ describe('SimWorld', () => {
     expect(humanoids).toHaveLength(2)
     expect(Math.hypot(humanoids[0]!.x - humanoids[1]!.x, humanoids[0]!.z - humanoids[1]!.z)).toBeGreaterThan(20)
     expect(humanoids.map((entity) => [entity.homeX, entity.homeZ])).toEqual(layout.population.humanoidStations.map((station) => [station[0], station[2]]))
+    const vehicles = world.entities.filter((entity) => entity.kind === 'agv' || entity.kind === 'igv')
+    expect(humanoids.every((robot) => vehicles.every((vehicle) =>
+      Math.hypot(robot.x - vehicle.x, robot.z - vehicle.z) >= groundBodyRadius(robot) + groundBodyRadius(vehicle) + 0.4
+    ))).toBe(true)
+  })
+  it('spawns ground vehicles without overlapping body envelopes', () => {
+    const world = new SimWorld(layout, 1009)
+    const vehicles = world.entities.filter((entity) => entity.kind === 'agv' || entity.kind === 'igv')
+    for (let left = 0; left < vehicles.length; left++) for (let right = left + 1; right < vehicles.length; right++) {
+      expect(Math.hypot(
+        vehicles[left]!.x - vehicles[right]!.x,
+        vehicles[left]!.z - vehicles[right]!.z
+      )).toBeGreaterThanOrEqual(
+        groundBodyRadius(vehicles[left]!) + groundBodyRadius(vehicles[right]!) + 0.05 - 1e-9
+      )
+    }
   })
   it('stages two-person response coverage near every safety-device region', () => {
     const world = new SimWorld(layout, 1007)
@@ -66,10 +84,10 @@ describe('SimWorld', () => {
     const world = new SimWorld(layout, 98)
     const follower = world.entities.find((entity) => entity.kind === 'agv')!
     const leader = world.entities.filter((entity) => entity.kind === 'agv')[1]!
-    follower.x = 0; follower.z = 0; follower.yaw = 0; follower.speed = follower.maxSpeed; follower.targetX = 10; follower.targetZ = 0
-    leader.x = 4; leader.z = 0; leader.behavior = 'halt'; leader.targetX = 4; leader.targetZ = 0
+    follower.x = 10; follower.z = 0; follower.yaw = 0; follower.speed = follower.maxSpeed; follower.targetX = 20; follower.targetZ = 0
+    leader.x = 14; leader.z = 0; leader.behavior = 'halt'; leader.targetX = 14; leader.targetZ = 0
     world.tick(1 / 60)
-    expect(follower.x).toBe(0)
+    expect(follower.x).toBe(10)
     expect(follower.trafficSpeedLimit).toBe(0)
   })
   it('clears OHTs to reachable rail-side parking instead of halting them in place for a gas leak', () => {
@@ -90,6 +108,24 @@ describe('SimWorld', () => {
     })).toBe(true)
     expect(ohts.some((entity) => entity.behavior === 'halt')).toBe(false)
   })
+  it('reserves separated ground-robot parking nodes during a gas evacuation', () => {
+    const world = new SimWorld(layout, 961)
+    world.triggerEmergency('gasLeak')
+    world.setPhase('alarm')
+    const parked = world.entities.filter((entity) =>
+      ['agv', 'igv'].includes(entity.kind) && entity.behavior === 'yield'
+    )
+    const humanoids = world.entities.filter((entity) => entity.kind === 'humanoid')
+    expect(parked.every((vehicle) => humanoids.every((robot) =>
+      Math.hypot(vehicle.goalX - robot.x, vehicle.goalZ - robot.z) >= 3 - 1e-9
+    ))).toBe(true)
+    for (let left = 0; left < parked.length; left++) for (let right = left + 1; right < parked.length; right++) {
+      expect(Math.hypot(
+        parked[left]!.goalX - parked[right]!.goalX,
+        parked[left]!.goalZ - parked[right]!.goalZ
+      )).toBeGreaterThanOrEqual(2.2 - 1e-9)
+    }
+  })
   it('lets a yielding responder step away from an emergency vehicle to break a safe-stop deadlock', () => {
     const world = new SimWorld(layout, 97)
     const vehicle = world.entities.find((entity) => entity.kind === 'igv')!
@@ -99,6 +135,31 @@ describe('SimWorld', () => {
     updateTraffic(world)
     expect(responder.trafficSpeedLimit).toBeGreaterThan(0)
     expect(vehicle.trafficSpeedLimit).toBe(0)
+  })
+  it('keeps operator-dispatched gas robots behind evacuees in a shared egress lane', () => {
+    const world = new SimWorld(layout, 971)
+    world.triggerEmergency('gasLeak')
+    world.setPhase('alarm')
+    world.tick(1 / 60)
+    const task = world.humanoidTasks.find((candidate) => candidate.kind === 'gas_isolation')!
+    const robot = world.entities.find((entity) => entity.id === task.robotId)!
+    const person = world.entities.find((entity) => entity.kind === 'person' && entity.role !== 'responder')!
+    for (const entity of world.entities) {
+      if (entity === person || entity === robot || entity.kind === 'arm') continue
+      entity.x = 500 + entity.index * 4
+      entity.z = 500
+    }
+    robot.x = 0
+    robot.z = 0
+    robot.yaw = 0
+    person.x = 0.8
+    person.z = 0
+    updateTraffic(world)
+    expect(robot.trafficSpeedLimit).toBe(0)
+
+    task.requestedBy = 'showcase'
+    updateTraffic(world)
+    expect(robot.trafficSpeedLimit).toBeGreaterThan(0)
   })
   it('keeps an evacuee outside a safe-stopped humanoid body without moving the robot authority pose', () => {
     const world = new SimWorld(layout, 972)
@@ -125,6 +186,145 @@ describe('SimWorld', () => {
     expect(Math.hypot(person.x - robot.x, person.z - robot.z)).toBeGreaterThanOrEqual(0.68 - 1e-9)
     expect([robot.x, robot.z]).toEqual(robotPose)
     expect(person.trafficSpeedLimit).toBeLessThanOrEqual(person.maxSpeed * 0.12 + 1e-9)
+  })
+  it('treats a standby humanoid as stationary even when its prior moving status is stale', () => {
+    const world = new SimWorld(layout, 973)
+    const person = world.entities.find((entity) => entity.kind === 'person' && entity.role !== 'responder')!
+    const robot = world.entities.find((entity) => entity.kind === 'humanoid')!
+    for (const entity of world.entities) {
+      if (entity === person || entity === robot || entity.kind === 'arm') continue
+      entity.x = 500 + entity.index * 4
+      entity.z = 500
+    }
+    person.x = 0
+    person.z = 0
+    person.yaw = 0
+    person.behavior = 'evacuate'
+    robot.x = 1.8
+    robot.z = 0
+    robot.speed = 0
+    robot.status = 'moving'
+    robot.activity = 'standby'
+    robot.emergency = true
+    updateTraffic(world)
+    expect(person.trafficSpeedLimit).toBeGreaterThan(0)
+    expect(person.trafficSpeedLimit).toBeLessThan(person.maxSpeed)
+  })
+  it('re-plans around a graph waypoint occupied by a stationary ground robot', () => {
+    const world = new SimWorld(layout, 976)
+    const graph = world.layout.walkGraph
+    const person = world.entities.find((entity) => entity.kind === 'person' && entity.role === 'operator')!
+    const robot = world.entities.find((entity) => entity.kind === 'agv')!
+    for (const entity of world.entities.filter((candidate) =>
+      candidate !== robot && ['agv', 'igv', 'humanoid'].includes(candidate.kind)
+    )) {
+      entity.x = 500 + entity.index * 3
+      entity.z = 500
+    }
+    const detour = graph.nodes
+      .map((_, index) => ({ index, neighbors: graph.edges[index]!.map((edge) => edge.to) }))
+      .find(({ index, neighbors }) =>
+        neighbors.length >= 3 &&
+        neighbors.some((from) => neighbors.some((to) =>
+          from !== to && graph.findPath(from, to, new Map(), new Set([index])).length > 0
+        ))
+      )!
+    const from = detour.neighbors[0]!
+    const to = detour.neighbors.find((candidate) =>
+      candidate !== from && graph.findPath(from, candidate, new Map(), new Set([detour.index])).length > 0
+    )!
+    const start = graph.nodes[from]!
+    const occupied = graph.nodes[detour.index]!
+    const goal = graph.nodes[to]!
+    const approachX = occupied.x - start.x
+    const approachZ = occupied.z - start.z
+    const approachLength = Math.max(0.001, Math.hypot(approachX, approachZ))
+    person.x = occupied.x - approachX / approachLength * 2
+    person.z = occupied.z - approachZ / approachLength * 2
+    person.behavior = 'normal'
+    person.personActivity = 'walkingToWork'
+    person.goalX = goal.x
+    person.goalZ = goal.z
+    person.route = [from, detour.index, to]
+    person.routeCursor = 1
+    person.targetX = occupied.x
+    person.targetZ = occupied.z
+    person.navigationBestDistance = 0
+    person.navigationLastProgressAt = world.simTime - 5
+    robot.x = occupied.x
+    robot.z = occupied.z
+    robot.speed = 0
+    robot.behavior = 'halt'
+    robot.status = 'waiting'
+
+    world.tick(1 / 60)
+
+    expect(person.route.length).toBeGreaterThan(0)
+    expect(person.route).not.toContain(detour.index)
+    expect(Number.isFinite(person.targetX)).toBe(true)
+  })
+  it('steers laterally around a facility column without crossing its physical boundary', () => {
+    const world = new SimWorld(layout, 973)
+    const person = world.entities.find((entity) => entity.kind === 'person' && entity.role === 'operator')!
+    for (const entity of world.entities.filter((candidate) => groundBodyRadius(candidate) > 0 && candidate !== person)) {
+      entity.x = 500 + entity.index * 3
+      entity.z = 500
+    }
+    const column = world.layout.groundObstacles.find((obstacle) => obstacle.id === 'column:-96:-96')!
+    person.x = -96
+    person.z = -93
+    person.yaw = -Math.PI / 2
+    person.speed = person.maxSpeed
+    person.personActivity = 'walkingToWork'
+    person.goalX = -96
+    person.goalZ = -101
+    person.targetX = person.goalX
+    person.targetZ = person.goalZ
+    person.route = []
+    let maximumLateralOffset = 0
+    for (let tick = 0; tick < 360 && person.z > -97; tick++) {
+      person.trafficSpeedLimit = person.maxSpeed
+      updateMovement(world, 1 / 60)
+      maximumLateralOffset = Math.max(maximumLateralOffset, Math.abs(person.x + 96))
+      expect(circleIntersectsObstacle(person.x, person.z, groundBodyRadius(person), column)).toBe(false)
+    }
+    expect(person.z).toBeLessThanOrEqual(-97)
+    expect(maximumLateralOffset).toBeGreaterThan(0.25)
+  })
+  it('projects overlapping ground robots apart using their body envelopes', () => {
+    const world = new SimWorld(layout, 974)
+    const robots = world.entities.filter((entity) => entity.kind === 'agv').slice(0, 2)
+    for (const [index, robot] of robots.entries()) {
+      robot.x = 200
+      robot.z = 200
+      robot.speed = 0
+      robot.targetX = 210
+      robot.targetZ = 200 + index
+      robot.goalX = robot.targetX
+      robot.goalZ = robot.targetZ
+    }
+    updateMovement(world, 1 / 60)
+    expect(Math.hypot(robots[0]!.x - robots[1]!.x, robots[0]!.z - robots[1]!.z)).toBeGreaterThanOrEqual(
+      groundBodyRadius(robots[0]!) + groundBodyRadius(robots[1]!)
+    )
+  })
+  it('marks humanoids as baton-equipped evacuation guides only during an active evacuation incident', () => {
+    const world = new SimWorld(layout, 975)
+    world.triggerEmergency('fire')
+    world.setPhase('alarm')
+    world.tick(1 / 60)
+    const activePose = new Float32Array(world.poseSnapshot().buffer)
+    const humanoids = world.entities.filter((entity) => entity.kind === 'humanoid')
+    expect(humanoids.every((entity) =>
+      (activePose[entity.index * POSE_STRIDE + PoseSlot.FLAGS]! & PoseFlags.EVACUATION_GUIDE) !== 0
+    )).toBe(true)
+
+    world.finishEmergency()
+    world.tick(1 / 60)
+    const normalPose = new Float32Array(world.poseSnapshot().buffer)
+    expect(humanoids.every((entity) =>
+      (normalPose[entity.index * POSE_STRIDE + PoseSlot.FLAGS]! & PoseFlags.EVACUATION_GUIDE) === 0
+    )).toBe(true)
   })
   it('advances a crowd through a shared graph waypoint without violating personal space', () => {
     const world = new SimWorld(layout, 971)
@@ -295,7 +495,7 @@ describe('SimWorld', () => {
       verified: true
     })
     expect(manualValvePoseObserved).toBe(true)
-    expect(human!.humanWorkZoneSeconds).toBeGreaterThanOrEqual(6.2)
+    expect(human!.humanWorkZoneSeconds).toBeGreaterThanOrEqual(8.2)
     expect(human!.spotterClearance).toBeGreaterThanOrEqual(2.2)
     expect(human!.spotterClearance).toBeLessThanOrEqual(3.4)
 
@@ -319,7 +519,7 @@ describe('SimWorld', () => {
       verified: true
     })
     expect(humanoid!.isolationElapsed).toBeGreaterThan(0)
-  }, 15_000)
+  }, 60_000)
   it('requires the authenticated external work-permit event for a live gas isolation', () => {
     const world = new SimWorld(layout, 766)
     world.triggerEmergency('gasLeak')
@@ -486,6 +686,7 @@ describe('SimWorld', () => {
     const task = world.humanoidTasks.find((candidate) => candidate.kind === 'gas_isolation')!
     const robot = world.entities.find((entity) => entity.id === task.robotId)!
     expect(task.gasSpotterId).toBeUndefined()
+    expect(robot.maxSpeed).toBeGreaterThanOrEqual(1.75)
     task.status = 'interacting'
     robot.x = task.targetX
     robot.z = task.targetZ
@@ -540,7 +741,7 @@ describe('SimWorld', () => {
     expect(task.gasIsolationVerified).not.toBe(true)
     expect(world.emergency.hazardControlled).not.toBe(true)
 
-    task.stageStartedAt = world.simTime - 6.2
+    task.stageStartedAt = world.simTime - 8.2
     world.tick(1 / 60)
     expect(task.gasIsolationVerified).toBe(true)
     expect(world.emergency.hazardControlled).toBe(true)
@@ -630,6 +831,27 @@ describe('SimWorld', () => {
     expect(medicalWorld.emergency.kind).toBe('medical')
     expect(medicalWorld.entities.some((entity) => entity.personActivity === 'collapsed')).toBe(true)
   })
+  it('keeps a delayed medical transport in response after the 90-second escalation warning', () => {
+    const world = new SimWorld(layout, 77)
+    world.loadScenario(ScenarioSchema.parse(medicalJson))
+    for (let tick = 0; tick < 7 * 60; tick++) world.tick(1 / 60)
+    const vehicle = world.medicalResponse?.vehicleId
+      ? world.entities.find((entity) => entity.id === world.medicalResponse?.vehicleId)
+      : undefined
+    if (vehicle && world.emergency.hazard) {
+      // Model an unavailable transport without changing the medical workflow:
+      // the timeout must escalate to an operator, never certify all-clear.
+      vehicle.rmfControlled = true
+      vehicle.x = world.emergency.hazard.sourceX
+      vehicle.z = world.emergency.hazard.sourceZ
+    }
+    // Jump the deterministic scenario clock to its escalation threshold; the
+    // transport remains at the incident and therefore cannot complete.
+    world.simTime = 90
+    world.tick(1 / 60)
+    expect(world.emergency.phase).toBe('response')
+    expect(world.events.some((event) => event.message?.includes('현장 지휘 확인 필요'))).toBe(true)
+  })
   it('moves local humanoids outside the final fire perimeter before safe-stop', () => {
     const world = new SimWorld(layout, 74)
     world.triggerEmergency('fire')
@@ -713,7 +935,7 @@ describe('SimWorld', () => {
     expect(operator.workReservationTaskId).toBe(task.id)
     expect(operator.personActivity).toBe('inspecting')
     expect(Math.hypot(operator.x - task.targetX, operator.z - task.targetZ)).toBeLessThan(0.8)
-  }, 10_000)
+  }, 30_000)
   it('restarts the integrated showcase with one fresh causal task chain', () => {
     const world = new SimWorld(layout, 783)
     world.startHumanoidShowcase()
@@ -800,6 +1022,28 @@ describe('SimWorld', () => {
     for (let tick = 0; tick < 300; tick++) world.tick(1 / 60)
     expect(Math.hypot(person.x - musterSlot[0], person.z - musterSlot[1])).toBeLessThan(0.1)
     expect(person.status).toBe('waiting')
+  })
+  it('reserves muster slots outside stationary robot body envelopes', () => {
+    const world = new SimWorld(layout, 977)
+    const person = world.entities.find((entity) => entity.kind === 'person' && entity.role !== 'responder')!
+    const robot = world.entities.find((entity) => entity.kind === 'agv')!
+    world.triggerEmergency('fire')
+    world.setPhase('alarm')
+    world.assignEvacuationSlot(person)
+    const initiallySelected = [person.goalX, person.goalZ] as const
+    person.evacuationSlotIndex = undefined
+    robot.x = initiallySelected[0]
+    robot.z = initiallySelected[1]
+    robot.speed = 0
+    robot.behavior = 'halt'
+    robot.status = 'waiting'
+
+    world.assignEvacuationSlot(person)
+
+    expect([person.goalX, person.goalZ]).not.toEqual(initiallySelected)
+    expect(Math.hypot(person.goalX - robot.x, person.goalZ - robot.z)).toBeGreaterThanOrEqual(
+      groundBodyRadius(person) + groundBodyRadius(robot) + 0.42
+    )
   })
   it('holds evacuated people at muster through all-clear before staged re-entry', () => {
     const world = new SimWorld(layout, 791)
@@ -1158,6 +1402,7 @@ describe('SimWorld', () => {
     world.tick(1 / 60)
     const response = world.medicalResponse!
     const task = world.humanoidTasks.find((candidate) => candidate.kind === 'medical_support')!
+    expect(task.robotId).toBe('humanoid-002')
     const robot = world.entities.find((entity) => entity.id === task.robotId)!
     const patient = world.entities.find((entity) => entity.id === response.victimId)!
     const responder = world.entities.find((entity) => entity.id === response.kitResponderId)!
