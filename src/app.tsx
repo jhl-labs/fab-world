@@ -645,12 +645,21 @@ export function FabApp(): ReactElement {
       if (cancelled) { engine.dispose(); return }
       engineRef.current = engine
       engine.setEquipmentStates(equipmentStatesRef.current)
+      engine.setTimeScale(store.getState().timeScale)
       setRendererReady(true)
     }).catch(() => {
       if (!cancelled) setRendererError(true)
     })
     return () => { cancelled = true; engineRef.current?.dispose(); engineRef.current = undefined }
   }, [ready, entities])
+  useEffect(() => {
+    let previous = store.getState().timeScale
+    return store.subscribe((state) => {
+      if (state.timeScale === previous) return
+      previous = state.timeScale
+      engineRef.current?.setTimeScale(previous)
+    })
+  }, [])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
       const target = event.target

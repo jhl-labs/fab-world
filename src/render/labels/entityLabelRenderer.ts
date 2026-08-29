@@ -46,6 +46,7 @@ export class EntityLabelRenderer {
   private readonly layer = document.createElement('div')
   private readonly entries = new Map<string, LabelEntry>()
   private readonly world = new THREE.Vector3()
+  private timeScale = 1
 
   constructor(private readonly container: HTMLElement, entities: readonly EntityMeta[]) {
     this.layer.className = 'entity-label-layer'
@@ -72,34 +73,45 @@ export class EntityLabelRenderer {
     entry.element.classList.toggle('entity-label-active', badge !== undefined)
   }
 
+  setTimeScale(value: number): void { this.timeScale = value }
+
   update(reader: PoseReader, camera: THREE.Camera): void {
     const width = this.container.clientWidth
     const height = this.container.clientHeight
     if (width <= 0 || height <= 0) return
     for (const { entity, element } of this.entries.values()) {
+      const isResponseSubject = entity.kind === 'humanoid' || (entity.kind === 'person' && entity.role === 'responder')
+      // At accelerated playback the labels are more expensive and visually
+      // noisier than the instanced actors themselves. Keep only operationally
+      // important response tags so body motion retains the frame budget.
+      if (this.timeScale >= 4 && !isResponseSubject) {
+        if (!element.hidden) element.hidden = true
+        continue
+      }
       const pose = reader.pose(entity.index)
       this.world.set(pose.x, pose.y + yOffset[entity.kind], pose.z).project(camera)
       const visible = this.world.z >= -1 && this.world.z <= 1 && Math.abs(this.world.x) <= 1.08 && Math.abs(this.world.y) <= 1.08
-      if (!visible) { element.hidden = true; continue }
+      if (!visible) { if (!element.hidden) element.hidden = true; continue }
       const ndcX = this.world.x
       const ndcY = this.world.y
       const distance = camera.position.distanceTo(this.world.unproject(camera))
       // A label must identify the subject of a shot, not turn a wide emergency
       // overview into a wall of names. Keep the response team readable from
       // afar; reveal routine people and logistics only when the camera is near.
-      const isResponseSubject = entity.kind === 'humanoid' || (entity.kind === 'person' && entity.role === 'responder')
       // At an assembly-point overview, dozens of worker tags overlap into a
       // false visual alarm. People still identify themselves at operational
       // distance, while the response assets remain legible across the floor.
       const labelDistance = isResponseSubject ? 210 : entity.kind === 'person' ? 18 : 36
-      if (distance > labelDistance) { element.hidden = true; continue }
+      if (distance > labelDistance) { if (!element.hidden) element.hidden = true; continue }
       const scale = THREE.MathUtils.clamp(1.12 - distance / 180, 0.58, 1)
       const opacity = entity.kind === 'person' && entity.role !== 'responder'
         ? THREE.MathUtils.clamp(1.15 - distance / 150, 0.36, 0.82)
         : THREE.MathUtils.clamp(1.22 - distance / 240, 0.58, 1)
       element.hidden = false
-      element.style.opacity = opacity.toFixed(2)
-      element.style.transform = `translate(-50%, -100%) translate(${((ndcX + 1) * 0.5 * width).toFixed(1)}px, ${((-ndcY + 1) * 0.5 * height).toFixed(1)}px) scale(${scale.toFixed(2)})`
+      const nextOpacity = opacity.toFixed(2)
+      const nextTransform = `translate(-50%, -100%) translate(${((ndcX + 1) * 0.5 * width).toFixed(1)}px, ${((-ndcY + 1) * 0.5 * height).toFixed(1)}px) scale(${scale.toFixed(2)})`
+      if (element.style.opacity !== nextOpacity) element.style.opacity = nextOpacity
+      if (element.style.transform !== nextTransform) element.style.transform = nextTransform
     }
   }
 

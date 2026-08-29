@@ -79,6 +79,7 @@ export class RenderEngine {
   acceptFallbackPose(buffer: ArrayBuffer, generation: number, entityCount: number, simTimeMs: number): void { this.reader.acceptFallback(buffer, generation, entityCount, simTimeMs) }
   select(entity?: EntityMeta): void { this.agents.select(entity?.index); this.people.select(entity?.index); if (entity) this.camera.follow(entity) }
   setCameraMode(mode: CameraMode): void { this.camera.setMode(mode) }
+  setTimeScale(value: number): void { this.labels.setTimeScale(value) }
   setEntityLabelBadge(entityId: string, badge?: string): void { this.labels.setBadge(entityId, badge) }
   cueInteraction(robot: EntityMeta, person: EntityMeta, eventPose?: InteractionEventPose): void {
     this.cuePersonInteraction(robot, person, eventPose, 'clearance')

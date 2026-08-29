@@ -102,17 +102,17 @@ function buildPersonMotionProfile(index: number, role: SimEntity['role']): {
   const acknowledgement = stableTrait(index, 47.53)
   if (role === 'responder') return {
     preferredSpeed: 1.2 + pace * 0.18,
-    emergencySpeed: 1.56 + urgency * 0.16,
+    emergencySpeed: 2.3 + urgency * 0.25,
     alarmReactionDelay: 0.35 + acknowledgement * 0.45
   }
   if (role === 'operator') return {
     preferredSpeed: 1.1 + pace * 0.18,
-    emergencySpeed: 1.56 + urgency * 0.16,
+    emergencySpeed: 2.05 + urgency * 0.25,
     alarmReactionDelay: 0.55 + acknowledgement * 0.9
   }
   return {
     preferredSpeed: 1.05 + pace * 0.19,
-    emergencySpeed: 1.56 + urgency * 0.16,
+    emergencySpeed: 2.05 + urgency * 0.25,
     alarmReactionDelay: 1.15 + acknowledgement * 1.95
   }
 }

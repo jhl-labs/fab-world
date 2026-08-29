@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { PoseFlags, type EntityMeta } from '../../core/protocol'
 import type { PoseReader } from '../interpolate'
+import { personLocomotionPose } from './personGait'
 
 type BodyPart =
   | 'head'
@@ -265,7 +266,6 @@ export class PersonRenderer {
   update(reader: PoseReader): void {
     this.members.forEach((entity, index) => {
       const pose = reader.pose(entity.index)
-      const fast = pose.animation === 2
       const fallen = pose.animation === 3
       const acknowledging = pose.animation === 4
       const receiving = pose.animation === 5
@@ -274,9 +274,9 @@ export class PersonRenderer {
       const monitoring = pose.animation === 8
       const manualValve = pose.animation === 9
       const fireSuppressing = pose.animation === 10
-      const pace = pose.animation === 1 || fast ? THREE.MathUtils.clamp(pose.speed / (fast ? 1.7 : 1.2), 0, 1) : 0
-      const gait = Math.sin(pose.phase * Math.PI * 2) * pace * (fast ? 0.78 : 0.52)
-      const baseY = pose.y - 0.9 + (fallen ? 0.24 : (1 - Math.cos(pose.phase * Math.PI * 4)) * pace * 0.009) - (treating ? 0.18 : 0)
+      const locomotion = personLocomotionPose(pose.animation, pose.speed, pose.phase)
+      const pace = locomotion.pace
+      const baseY = pose.y - 0.9 + (fallen ? 0.24 : locomotion.bob) - (treating ? 0.18 : 0)
       this.rootRotation.setFromAxisAngle(this.yAxis, -pose.yaw)
       if (fallen) this.rootRotation.multiply(this.localRotation.setFromAxisAngle(this.zAxis, Math.PI / 2))
       const baseSuit = entity.role === 'responder' && (pose.flags & PoseFlags.EMERGENCY) !== 0
@@ -285,13 +285,13 @@ export class PersonRenderer {
       const suit = this.selected === entity.index
         ? this.color.setHex(baseSuit).lerp(new THREE.Color(0xffffff), 0.28).getHex()
         : baseSuit
-      const postureSway = fallen || treating ? 0 : gait * 0.028
-      const torsoLean = (treating ? -0.18 : manualValve ? -0.1 : fast ? -0.12 : 0) + postureSway
+      const postureSway = fallen || treating ? 0 : locomotion.lateralSway
+      const torsoLean = (treating ? -0.18 : manualValve ? -0.1 : locomotion.torsoLean) + postureSway
       this.place('torso', index, pose.x, baseY, pose.z, treating ? 0.08 : 0, 0.98, 0, torsoLean, this.rootRotation, suit)
       // The hood stays continuous with the coverall while a small exposed
       // face area, eyes, goggles, and mask make the wearer unmistakably human.
-      const headLean = (treating ? -0.12 : 0) - postureSway * 0.45
-      const headX = treating ? 0.13 : 0
+      const headLean = (treating ? -0.12 : locomotion.headLean) - postureSway * 0.45
+      const headX = treating ? 0.13 : locomotion.headForward
       const skin = skinTones[entity.index % skinTones.length]
       this.place('head', index, pose.x, baseY, pose.z, headX, 1.48, 0, headLean, this.rootRotation, suit)
       this.place('visor', index, pose.x, baseY, pose.z, headX + 0.132, 1.495, 0, headLean, this.rootRotation, skin)
@@ -300,22 +300,22 @@ export class PersonRenderer {
       this.place('eyes', index, pose.x, baseY, pose.z, headX + 0.165, 1.535, 0, headLean, this.rootRotation, 0x2e211d)
       const helmetColor = entity.role === 'responder' ? 0xf4f7f9 : 0xf0b833
       this.scale.setScalar(entity.role === 'operator' ? 0 : 1)
-      this.place('hardhat', index, pose.x, baseY, pose.z, treating ? 0.145 : 0, 1.54, 0, treating ? -0.12 : 0, this.rootRotation, helmetColor)
-      this.place('hardhatBrim', index, pose.x, baseY, pose.z, treating ? 0.17 : 0.025, 1.545, 0, treating ? -0.12 : 0, this.rootRotation, helmetColor)
+      this.place('hardhat', index, pose.x, baseY, pose.z, treating ? 0.145 : locomotion.headForward, 1.54, 0, treating ? -0.12 : locomotion.headLean, this.rootRotation, helmetColor)
+      this.place('hardhatBrim', index, pose.x, baseY, pose.z, treating ? 0.17 : locomotion.headForward + 0.025, 1.545, 0, treating ? -0.12 : locomotion.headLean, this.rootRotation, helmetColor)
       this.scale.set(1, 1, 1)
 
       const gesture = THREE.MathUtils.smoothstep(pose.auxA, 0, 1)
       const idleVariation = pace === 0 && !fallen && !treating
         ? Math.sin(entity.index * 1.618) * 0.035
         : 0
-      let leftUpperArm = gait * -0.62 + idleVariation
-      let leftForearm = leftUpperArm - 0.16 - Math.max(0, -gait) * 0.24
-      let rightUpperArm = gait * 0.62 - idleVariation * 0.65
-      let rightForearm = rightUpperArm - 0.11 - Math.max(0, gait) * 0.24
-      let leftThigh = gait * 0.62 + idleVariation * 0.22
-      let leftShin = -Math.max(0, gait) * 0.48
-      let rightThigh = gait * -0.62 - idleVariation * 0.22
-      let rightShin = -Math.max(0, -gait) * 0.48
+      let leftUpperArm = locomotion.leftUpperArm + idleVariation
+      let leftForearm = locomotion.leftForearm + idleVariation
+      let rightUpperArm = locomotion.rightUpperArm - idleVariation * 0.65
+      let rightForearm = locomotion.rightForearm - idleVariation * 0.65
+      let leftThigh = locomotion.leftThigh + idleVariation * 0.22
+      let leftShin = locomotion.leftShin
+      let rightThigh = locomotion.rightThigh - idleVariation * 0.22
+      let rightShin = locomotion.rightShin
       if (acknowledging) {
         rightUpperArm = THREE.MathUtils.lerp(0.1, 1.22, Math.max(0.35, gesture))
         rightForearm = THREE.MathUtils.lerp(-0.1, 2.15, Math.max(0.35, gesture))

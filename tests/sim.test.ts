@@ -4,7 +4,7 @@ import fireJson from '../data/scenarios/fire.json'
 import medicalJson from '../data/scenarios/medical.json'
 import { FabLayoutSchema, ScenarioSchema } from '../src/core/schema'
 import { updateTraffic } from '../src/sim/systems/trafficSystem'
-import { groundBodyRadius, updateMovement } from '../src/sim/systems/movementSystem'
+import { evacuationFlowSteering, groundBodyRadius, staticObstacleSteering, updateMovement } from '../src/sim/systems/movementSystem'
 import { SimWorld } from '../src/sim/world'
 import { gasValveGripTarget } from '../src/core/interactionGeometry'
 import { POSE_STRIDE, PoseFlags, PoseSlot } from '../src/core/protocol'
@@ -381,6 +381,8 @@ describe('SimWorld', () => {
     expect(Math.max(...engineers.map(delay)) - Math.min(...engineers.map(delay))).toBeGreaterThan(1.6)
     expect(new Set(operators.map((person) => person.emergencySpeed?.toFixed(4))).size).toBeGreaterThan(operators.length * 0.8)
     expect(new Set(engineers.map((person) => person.emergencySpeed?.toFixed(4))).size).toBeGreaterThan(engineers.length * 0.8)
+    expect(operators.every((person) => (person.emergencySpeed ?? 0) >= 2.05 && (person.emergencySpeed ?? 0) <= 2.3)).toBe(true)
+    expect(engineers.every((person) => (person.emergencySpeed ?? 0) >= 2.05 && (person.emergencySpeed ?? 0) <= 2.3)).toBe(true)
     world.tick(1 / 60)
     expect([...operators, ...engineers].every((person) =>
       person.animation === 7 &&
@@ -417,6 +419,88 @@ describe('SimWorld', () => {
     expect(person.personActivity).toBe('mustered')
     expect(person.speed).toBeLessThan(0.05)
     expect(headingError).toBeLessThan(0.05)
+  })
+  it('fans evacuees into stable lateral flow bands before the muster formation', () => {
+    const world = new SimWorld(layout, 771)
+    const people = world.entities.filter((entity) => entity.kind === 'person' && entity.role !== 'responder')
+    const evacuees = people.slice(0, 8)
+    for (const person of people) {
+      person.x = 1_000 + person.index
+      person.z = 1_000
+    }
+    for (const person of evacuees) {
+      person.x = 0
+      person.z = 0
+      person.behavior = 'evacuate'
+    }
+
+    const lateralTargets = evacuees.map((person) => evacuationFlowSteering(world, person, 8, 0)[1])
+    expect(Math.max(...lateralTargets) - Math.min(...lateralTargets)).toBeGreaterThan(0.7)
+    expect(new Set(lateralTargets.map((target) => target.toFixed(2))).size).toBeGreaterThan(6)
+    expect(evacuationFlowSteering(world, evacuees[0]!, 8, 0, true)).toEqual([8, 0])
+  })
+  it('clears an equipment edge laterally before turning around its corner', () => {
+    const world = new SimWorld(layout, 773)
+    const person = world.entities.find((entity) => entity.kind === 'person')!
+    // Right edge of cleaner-291, reproducing a high-speed evacuation stall.
+    person.x = 52.271
+    person.z = -23.23
+    const steering = staticObstacleSteering(
+      world.layout.groundObstacleIndex,
+      person,
+      50.3 - person.x,
+      -21.6 - person.z
+    )
+
+    expect(Math.abs(steering[0])).toBeLessThan(0.01)
+    expect(steering[1]).toBeGreaterThan(1.4)
+  })
+  it('slows a running evacuee enough to capture a close navigation waypoint', () => {
+    const world = new SimWorld(layout, 774)
+    const person = world.entities.find((entity) => entity.kind === 'person')!
+    for (const other of world.entities) {
+      if (other === person || other.kind === 'oht' || other.kind === 'arm') continue
+      other.x = 1_000 + other.index
+      other.z = 1_000
+    }
+    const nodeIndex = 650
+    const node = world.layout.walkGraph.nodes[nodeIndex]!
+    person.x = 49.729
+    person.z = -84.292
+    person.goalX = 0
+    person.goalZ = -115.5
+    person.targetX = node.x
+    person.targetZ = node.z
+    person.route = world.layout.walkGraph.findPath(
+      nodeIndex,
+      world.layout.walkGraph.nearest(person.goalX, person.goalZ)
+    )
+    person.routeCursor = 0
+    person.behavior = 'evacuate'
+    person.personActivity = 'evacuating'
+    person.speed = 2.06
+    person.maxSpeed = 2.06
+    person.trafficSpeedLimit = 2.06
+    person.yaw = Math.atan2(node.z - person.z, node.x - person.x) + Math.PI / 2
+
+    for (let tick = 0; tick < 6 * 60 && person.routeCursor === 0; tick++) updateMovement(world, 1 / 60)
+
+    expect(person.routeCursor).toBeGreaterThan(0)
+  })
+  it('uses diagonal pedestrian route segments during an evacuation', () => {
+    const world = new SimWorld(layout, 772)
+    world.triggerEmergency('fire')
+    for (let tick = 0; tick < 6 * 60; tick++) world.tick(1 / 60)
+
+    const diagonalSegments = world.entities
+      .filter((entity) => entity.kind === 'person' && entity.behavior === 'evacuate')
+      .reduce((count, person) => count + person.route.slice(1).filter((nodeIndex, routeIndex) => {
+        const from = world.layout.walkGraph.nodes[person.route[routeIndex]!]!
+        const to = world.layout.walkGraph.nodes[nodeIndex]!
+        return Math.abs(from.x - to.x) > 0.1 && Math.abs(from.z - to.z) > 0.1
+      }).length, 0)
+
+    expect(diagonalSegments).toBeGreaterThan(100)
   })
   it('does not clear a gas leak from a fallback timer or an unverified all-clear request', () => {
     const world = new SimWorld(layout, 770)
@@ -810,6 +894,7 @@ describe('SimWorld', () => {
     person.evacuationMusterId = muster.id
     person.goalX = muster.position[0]
     person.goalZ = muster.position[2]
+    person.speed = 1
     person.targetX = Number.NaN
     person.targetZ = Number.NaN
     const start = [person.x, person.z] as const
@@ -819,6 +904,8 @@ describe('SimWorld', () => {
     expect([person.x, person.z]).toEqual(start)
     expect(person.status).toBe('waiting')
     expect([person.targetX, person.targetZ]).toEqual(start)
+    expect(person.speed).toBeGreaterThan(0.9)
+    expect(person.speed).toBeLessThan(1)
   })
   it('preserves the configured hazard kind when scenario steps enter detected phase', () => {
     const fireWorld = new SimWorld(layout, 76)

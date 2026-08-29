@@ -102,7 +102,9 @@ function chooseTarget(world: SimWorld, entity: SimEntity, blockedRobot?: SimEnti
     }
   }
   if (entity.route.length === 0) {
-    entity.speed = 0
+    // A transiently unavailable route is a controlled stop, not an
+    // instantaneous velocity reset. The integration below applies the
+    // entity's normal deceleration while replanning continues next tick.
     entity.status = 'waiting'
     entity.targetX = entity.x
     entity.targetZ = entity.z
@@ -201,7 +203,12 @@ function dynamicTrafficPenalties(
 export function updateMovement(world: SimWorld, dt: number): void {
   const stationaryGroundRobots = world.entities.filter(isStationaryGroundRobot)
   for (const entity of world.entities) {
-    if (!entity.rmfControlled) entity.animationPhase = (entity.animationPhase + dt * Math.max(entity.speed, 0.2)) % 1
+    if (!entity.rmfControlled) {
+      // One phase cycle contains two steps. Running covers more ground per
+      // stride, so it must not inherit the walk's one-cycle-per-metre rate.
+      const strideRate = entity.kind === 'person' && entity.animation === 2 ? 0.68 : 1
+      entity.animationPhase = (entity.animationPhase + dt * Math.max(entity.speed * strideRate, 0.2)) % 1
+    }
     if (entity.kind === 'arm') { entity.animation = 2; continue }
     if (entity.missionActivity === 'inspecting' || entity.missionActivity === 'reporting') {
       entity.speed = 0
@@ -451,19 +458,21 @@ export function updateMovement(world: SimWorld, dt: number): void {
     const toX = entity.targetX - entity.x; const toZ = entity.targetZ - entity.z; const remaining = Math.hypot(toX, toZ)
     const behaviorLimit = entity.behavior === 'yield' ? entity.maxSpeed * 0.35 : entity.maxSpeed
     let desired = Math.min(behaviorLimit, entity.trafficSpeedLimit)
-    const accel = entity.kind === 'oht' ? 1 : entity.kind === 'person' ? 1.5 : 1.8
+    const emergencyRun = entity.kind === 'person' && (entity.behavior === 'evacuate' || entity.behavior === 'respond')
+    const accel = entity.kind === 'oht' ? 1 : entity.kind === 'person' ? (emergencyRun ? 2.2 : 1.5) : 1.8
     const decel = entity.kind === 'person' ? (entity.behavior === 'evacuate' ? 2.8 : 2.2) : accel
     const formationApproach =
       entity.kind === 'person' &&
       entity.behavior === 'evacuate' &&
       entity.evacuationSlotIndex !== undefined &&
       remaining < 7
+    const crowdFlowSteering = evacuationFlowSteering(world, entity, toX, toZ, formationApproach)
     const sharedSpaceSteering = stationaryGroundRobotSteering(
       world.layout.groundObstacleIndex,
       stationaryGroundRobots,
       entity,
-      toX,
-      toZ
+      crowdFlowSteering[0],
+      crowdFlowSteering[1]
     )
     const steering = staticObstacleSteering(world.layout.groundObstacleIndex, entity, sharedSpaceSteering[0], sharedSpaceSteering[1])
     const yaw = Math.atan2(steering[1], steering[0])
@@ -486,6 +495,17 @@ export function updateMovement(world: SimWorld, dt: number): void {
       )
     if (finalPersonApproach || preciseHumanoidGoal) {
       desired = Math.min(desired, Math.sqrt(2 * decel * Math.max(0, remaining - 0.02)))
+    }
+    if (
+      entity.kind === 'person' &&
+      entity.route.length > 0 &&
+      entity.routeCursor < entity.route.length - 1 &&
+      remaining < 2
+    ) {
+      // At running speed the minimum turn radius can exceed the shared
+      // waypoint's arrival envelope, producing a perpetual orbit around a
+      // perfectly valid graph node. Shorten the stride into each corner.
+      desired = Math.min(desired, Math.max(0.5, remaining * 1.15))
     }
     if (formationApproach && remaining < 2) {
       // Dense hex-grid assembly needs a walking-speed terminal approach.
@@ -533,6 +553,47 @@ export function updateMovement(world: SimWorld, dt: number): void {
   resolveHumanRobotSpace(world)
 }
 
+/**
+ * Fans evacuees into stable, person-sized flow bands and starts a lateral pass
+ * before two bodies overlap. The navigation graph remains the safe corridor
+ * authority; this only varies the local trajectory inside that corridor.
+ */
+export function evacuationFlowSteering(
+  world: SimWorld,
+  entity: SimEntity,
+  targetX: number,
+  targetZ: number,
+  formationApproach = false
+): readonly [number, number] {
+  if (entity.kind !== 'person' || entity.behavior !== 'evacuate' || formationApproach) return [targetX, targetZ]
+  const length = Math.hypot(targetX, targetZ)
+  if (!Number.isFinite(length) || length < 0.12) return [targetX, targetZ]
+  const forwardX = targetX / length
+  const forwardZ = targetZ / length
+  const sideX = -forwardZ
+  const sideZ = forwardX
+  const stableBand = Math.sin((entity.index + 1) * 12.9898) * 0.46
+  let lateralIntent = stableBand * Math.min(1, length / 1.4)
+
+  for (const other of world.entities) {
+    if (other === entity || other.kind !== 'person' || other.carriedById) continue
+    const deltaX = other.x - entity.x
+    const deltaZ = other.z - entity.z
+    const longitudinal = deltaX * forwardX + deltaZ * forwardZ
+    const lateral = deltaX * sideX + deltaZ * sideZ
+    if (longitudinal <= 0.08 || longitudinal >= 2.4 || Math.abs(lateral) >= 0.9) continue
+    const preferredSide = Math.abs(lateral) > 0.08
+      ? -Math.sign(lateral)
+      : ((entity.index + other.index) & 1) === 0 ? 1 : -1
+    const proximity = 1 - longitudinal / 2.4
+    const overlap = 1 - Math.min(1, Math.abs(lateral) / 0.9)
+    lateralIntent += preferredSide * proximity * overlap * 0.72
+  }
+
+  lateralIntent = Math.max(-0.95, Math.min(0.95, lateralIntent))
+  return [targetX + sideX * lateralIntent, targetZ + sideZ * lateralIntent]
+}
+
 export function groundBodyRadius(entity: SimEntity): number {
   if (entity.kind === 'person') return 0.22
   if (entity.kind === 'humanoid') return 0.28
@@ -565,7 +626,7 @@ export function isStationaryGroundRobot(entity: SimEntity): boolean {
     )
 }
 
-function staticObstacleSteering(
+export function staticObstacleSteering(
   obstacles: GroundObstacleIndex,
   entity: SimEntity,
   targetX: number,
@@ -601,11 +662,14 @@ function staticObstacleSteering(
       if (!outside) {
         const candidates = preferredSide > 0 ? [maximumX, minimumX] : [minimumX, maximumX]
         sideX = candidates.find((candidateX) =>
-          pathIsClear(obstacles, entity.x, entity.z, candidateX, entity.z + forwardZ * 0.28, radius) &&
+          // Clear the equipment's side before resuming forward travel. A
+          // diagonal first step can cut into the expanded equipment box when
+          // collision projection has left the person exactly on its edge.
+          pathIsClear(obstacles, entity.x, entity.z, candidateX, entity.z, radius) &&
           pathIsClear(
             obstacles,
             candidateX,
-            entity.z + forwardZ * 0.28,
+            entity.z,
             candidateX,
             forwardZ > 0 ? maximumZ : minimumZ,
             radius
@@ -614,7 +678,7 @@ function staticObstacleSteering(
       }
       const sideZ = outside
         ? (forwardZ > 0 ? maximumZ : minimumZ)
-        : entity.z + forwardZ * 0.28
+        : entity.z
       return [sideX - entity.x, sideZ - entity.z]
     }
     const outside = entity.z < minimumZ || entity.z > maximumZ
@@ -622,10 +686,10 @@ function staticObstacleSteering(
     if (!outside) {
       const candidates = preferredSide > 0 ? [maximumZ, minimumZ] : [minimumZ, maximumZ]
       sideZ = candidates.find((candidateZ) =>
-        pathIsClear(obstacles, entity.x, entity.z, entity.x + forwardX * 0.28, candidateZ, radius) &&
+        pathIsClear(obstacles, entity.x, entity.z, entity.x, candidateZ, radius) &&
         pathIsClear(
           obstacles,
-          entity.x + forwardX * 0.28,
+          entity.x,
           candidateZ,
           forwardX > 0 ? maximumX : minimumX,
           candidateZ,
@@ -635,7 +699,7 @@ function staticObstacleSteering(
     }
     const sideX = outside
       ? (forwardX > 0 ? maximumX : minimumX)
-      : entity.x + forwardX * 0.28
+      : entity.x
     return [sideX - entity.x, sideZ - entity.z]
   }
   for (const angle of [0.48, -0.48, 0.82, -0.82, 1.12, -1.12].map((value) => value * preferredSide)) {
@@ -989,14 +1053,11 @@ function resolvePersonalSpace(world: SimWorld): void {
   const people = world.entities.filter((entity) => entity.kind === 'person' && !entity.carriedById)
   const minimum = 0.42
   for (let pass = 0; pass < 3; pass++) {
-    for (let leftIndex = 0; leftIndex < people.length; leftIndex++) {
-      const left = people[leftIndex]!
-      for (let rightIndex = leftIndex + 1; rightIndex < people.length; rightIndex++) {
-        const right = people[rightIndex]!
+    forEachNearbyPersonPair(people, minimum, (left, right) => {
         const dx = right.x - left.x
         const dz = right.z - left.z
         const distance = Math.hypot(dx, dz)
-        if (distance >= minimum) continue
+        if (distance >= minimum) return
         let nx: number
         let nz: number
         if (distance < 0.0001) {
@@ -1022,22 +1083,18 @@ function resolvePersonalSpace(world: SimWorld): void {
           const side = lateralAway(right, left, nx, nz)
           right.x += side[0] * correction; right.z += side[1] * correction
         }
-      }
-    }
+    })
   }
   const hardMinimum = 0.3
   // A later pair correction can compress an earlier pair in a dense queue.
   // Iterate the hard projection so the final pose, not only the first pass,
   // respects the physical body envelope.
   for (let pass = 0; pass < 4; pass++) {
-    for (let leftIndex = 0; leftIndex < people.length; leftIndex++) {
-      const left = people[leftIndex]!
-      for (let rightIndex = leftIndex + 1; rightIndex < people.length; rightIndex++) {
-        const right = people[rightIndex]!
+    forEachNearbyPersonPair(people, hardMinimum, (left, right) => {
         const dx = right.x - left.x
         const dz = right.z - left.z
         const distance = Math.hypot(dx, dz)
-        if (distance >= hardMinimum) continue
+        if (distance >= hardMinimum) return
         let nx: number
         let nz: number
         if (distance < 0.0001) {
@@ -1058,6 +1115,29 @@ function resolvePersonalSpace(world: SimWorld): void {
         } else if (!rightFixed) {
           right.x += nx * correction; right.z += nz * correction
         }
+    })
+  }
+}
+
+function forEachNearbyPersonPair(
+  people: readonly SimEntity[],
+  range: number,
+  visit: (left: SimEntity, right: SimEntity) => void
+): void {
+  const buckets = new Map<string, SimEntity[]>()
+  const key = (x: number, z: number): string => `${Math.floor(x / range)},${Math.floor(z / range)}`
+  for (const person of people) {
+    const cell = key(person.x, person.z)
+    const bucket = buckets.get(cell)
+    if (bucket) bucket.push(person)
+    else buckets.set(cell, [person])
+  }
+  for (const left of people) {
+    const cellX = Math.floor(left.x / range)
+    const cellZ = Math.floor(left.z / range)
+    for (let offsetX = -1; offsetX <= 1; offsetX++) for (let offsetZ = -1; offsetZ <= 1; offsetZ++) {
+      for (const right of buckets.get(`${cellX + offsetX},${cellZ + offsetZ}`) ?? []) {
+        if (right.index > left.index) visit(left, right)
       }
     }
   }

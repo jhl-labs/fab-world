@@ -421,26 +421,34 @@ function addExitAwareWalls(group: THREE.Group, layout: FabLayout, material: THRE
 }
 
 function addMusterAreas(group: THREE.Group, layout: FabLayout): void {
-  const padMaterial = new THREE.MeshStandardMaterial({ color: 0xd7ddd8, roughness: 0.82, metalness: 0 })
-  const boundaryMaterial = new THREE.MeshBasicMaterial({ color: 0xf2c94c })
-  const checkInMaterial = new THREE.MeshBasicMaterial({ color: 0x39a96b })
-  const markerMaterial = new THREE.MeshBasicMaterial({ color: 0x3f7f63, side: THREE.DoubleSide, transparent: true, opacity: 0.68 })
+  const padMaterial = new THREE.MeshStandardMaterial({ color: 0x287454, roughness: 0.78, metalness: 0 })
+  const boundaryMaterial = new THREE.MeshBasicMaterial({ color: 0xffd84d })
+  const checkInMaterial = new THREE.MeshBasicMaterial({ color: 0x74e5a2 })
+  const markerMaterial = new THREE.MeshBasicMaterial({ color: 0xf7fff9, side: THREE.DoubleSide, transparent: true, opacity: 0.82 })
   const markerGeometry = new THREE.RingGeometry(0.22, 0.27, 16)
   const signMaterial = buildMusterSignMaterial()
+  const floorLabelMaterial = buildMusterFloorMaterial()
   const markerCount = layout.emergency.musterPoints.reduce((count, point) => count + point.capacity, 0)
   const markers = new THREE.InstancedMesh(markerGeometry, markerMaterial, markerCount); markers.name = 'muster-position-markers'
   const markerMatrix = new THREE.Matrix4(); const markerRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2); let markerIndex = 0
   for (const muster of layout.emergency.musterPoints) {
     const outward = muster.position[2] < 0 ? -1 : 1; const padZ = muster.position[2] + outward * 2.35
     const pad = addBox(group, [12, 0.08, 6.2], [muster.position[0], -0.11, padZ], padMaterial); pad.name = `muster-pad:${muster.id}`
-    addBox(group, [12, 0.025, 0.12], [muster.position[0], -0.055, padZ - 3.04], boundaryMaterial)
-    addBox(group, [12, 0.025, 0.12], [muster.position[0], -0.055, padZ + 3.04], boundaryMaterial)
-    addBox(group, [0.12, 0.025, 6.2], [muster.position[0] - 5.94, -0.055, padZ], boundaryMaterial)
-    addBox(group, [0.12, 0.025, 6.2], [muster.position[0] + 5.94, -0.055, padZ], boundaryMaterial)
-    addBox(group, [8.8, 0.03, 0.16], [muster.position[0], -0.045, muster.position[2] - outward * 0.18], checkInMaterial)
-    const signX = muster.position[0] - 6.65; const signZ = muster.position[2] + outward * 4.75
-    addBox(group, [0.09, 2.65, 0.09], [signX - 0.85, 1.31, signZ], checkInMaterial); addBox(group, [0.09, 2.65, 0.09], [signX + 0.85, 1.31, signZ], checkInMaterial)
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.05), signMaterial); sign.name = `muster-sign:${muster.id}`; sign.position.set(signX, 2.45, signZ); sign.rotation.y = outward < 0 ? Math.PI : 0; group.add(sign)
+    addBox(group, [12, 0.035, 0.22], [muster.position[0], -0.045, padZ - 3.04], boundaryMaterial)
+    addBox(group, [12, 0.035, 0.22], [muster.position[0], -0.045, padZ + 3.04], boundaryMaterial)
+    addBox(group, [0.22, 0.035, 6.2], [muster.position[0] - 5.94, -0.045, padZ], boundaryMaterial)
+    addBox(group, [0.22, 0.035, 6.2], [muster.position[0] + 5.94, -0.045, padZ], boundaryMaterial)
+    addBox(group, [9.4, 0.035, 0.22], [muster.position[0], -0.035, muster.position[2] - outward * 0.18], checkInMaterial)
+    const floorLabel = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 2.05), floorLabelMaterial)
+    floorLabel.name = `muster-floor-label:${muster.id}`
+    floorLabel.position.set(muster.position[0], -0.015, padZ + outward * 1.65)
+    floorLabel.rotation.set(-Math.PI / 2, 0, outward > 0 ? Math.PI : 0)
+    floorLabel.userData.keepSeparate = true
+    group.add(floorLabel)
+    const signX = muster.position[0]; const signZ = muster.position[2] + outward * 5.05
+    addBox(group, [0.1, 3.1, 0.1], [signX - 1.55, 1.53, signZ], checkInMaterial); addBox(group, [0.1, 3.1, 0.1], [signX + 1.55, 1.53, signZ], checkInMaterial)
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 1.42), signMaterial); sign.name = `muster-sign:${muster.id}`; sign.position.set(signX, 2.7, signZ - outward * 0.055); sign.rotation.y = outward > 0 ? Math.PI : 0; sign.userData.keepSeparate = true; group.add(sign)
+    const rearSign = sign.clone(); rearSign.name = `muster-sign-rear:${muster.id}`; rearSign.position.z = signZ + outward * 0.055; rearSign.rotation.y += Math.PI; group.add(rearSign)
     const exit = [...layout.emergency.exits].sort((left, right) => Math.hypot(left.position[0] - muster.position[0], left.position[2] - muster.position[2]) - Math.hypot(right.position[0] - muster.position[0], right.position[2] - muster.position[2]))[0]
     if (exit) { const centerX = (exit.position[0] + muster.position[0]) / 2; const centerZ = (exit.position[2] + muster.position[2]) / 2; const length = Math.hypot(exit.position[0] - muster.position[0], exit.position[2] - muster.position[2]); const path = addBox(group, [length, 0.035, 2.2], [centerX, -0.14, centerZ], checkInMaterial); path.rotation.y = -Math.atan2(exit.position[2] - muster.position[2], exit.position[0] - muster.position[0]); path.name = `muster-egress:${muster.id}` }
     for (const slot of visualMusterSlots(muster.capacity, muster.position[2])) { markerMatrix.compose(new THREE.Vector3(muster.position[0] + slot[0], -0.045, muster.position[2] + slot[1]), markerRotation, new THREE.Vector3(1, 1, 1)); markers.setMatrixAt(markerIndex++, markerMatrix) }
@@ -449,10 +457,19 @@ function addMusterAreas(group: THREE.Group, layout: FabLayout): void {
 }
 
 function buildMusterSignMaterial(): THREE.MeshBasicMaterial {
-  const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 256; const context = canvas.getContext('2d')!
-  context.fillStyle = '#146447'; context.fillRect(0, 0, canvas.width, canvas.height); context.strokeStyle = '#f5f8f6'; context.lineWidth = 12; context.strokeRect(10, 10, canvas.width - 20, canvas.height - 20)
-  context.fillStyle = '#ffffff'; context.textAlign = 'center'; context.font = '700 62px sans-serif'; context.fillText('MUSTER POINT', canvas.width / 2, 105); context.font = '700 54px sans-serif'; context.fillText('비상 집결지', canvas.width / 2, 184)
+  const canvas = document.createElement('canvas'); canvas.width = 768; canvas.height = 288; const context = canvas.getContext('2d')!
+  context.fillStyle = '#087443'; context.fillRect(0, 0, canvas.width, canvas.height); context.strokeStyle = '#ffffff'; context.lineWidth = 14; context.strokeRect(10, 10, canvas.width - 20, canvas.height - 20)
+  context.fillStyle = '#ffffff'; context.textAlign = 'center'; context.font = '800 82px sans-serif'; context.fillText('대피 구역', canvas.width / 2, 122); context.font = '700 57px sans-serif'; context.fillText('EVACUATION AREA', canvas.width / 2, 218)
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; return new THREE.MeshBasicMaterial({ map: texture })
+}
+
+function buildMusterFloorMaterial(): THREE.MeshBasicMaterial {
+  const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 256; const context = canvas.getContext('2d')!
+  context.fillStyle = '#126d4a'; context.fillRect(0, 0, canvas.width, canvas.height)
+  context.strokeStyle = '#ffdd52'; context.lineWidth = 18; context.strokeRect(10, 10, canvas.width - 20, canvas.height - 20)
+  context.fillStyle = '#ffffff'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.font = '800 92px sans-serif'; context.fillText('대피 구역  ·  EVACUATION AREA', canvas.width / 2, canvas.height / 2)
+  const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace
+  return new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
 }
 
 function visualMusterSlots(capacity: number, musterZ: number): Array<readonly [number, number]> {

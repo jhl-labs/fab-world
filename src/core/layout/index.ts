@@ -47,7 +47,7 @@ function groundPathIsClear(
   )
 }
 
-function buildGroundGraph(layout: FabLayout, bodyRadius: number, obstacles: GroundObstacleIndex): NavGraph {
+function buildGroundGraph(layout: FabLayout, bodyRadius: number, obstacles: GroundObstacleIndex, allowDiagonals = false): NavGraph {
   const graph = new NavGraph()
   const xEdges: number[] = []; const zEdges: number[] = []
   let x = -layout.grid.columnWidths.reduce((sum, value) => sum + value, 0) / 2 - layout.grid.aisleWidth * (layout.grid.cols - 1) / 2
@@ -78,6 +78,22 @@ function buildGroundGraph(layout: FabLayout, bodyRadius: number, obstacles: Grou
       b !== undefined &&
       groundPathIsClear(obstacles, xs[i - 1]!, currentZ, xs[i]!, currentZ, bodyRadius)
     ) connect(graph, a, b)
+  }
+  if (allowDiagonals) for (let xIndex = 1; xIndex < xs.length; xIndex++) for (let zIndex = 1; zIndex < zs.length; zIndex++) {
+    const diagonals = [
+      [xs[xIndex - 1]!, zs[zIndex - 1]!, xs[xIndex]!, zs[zIndex]!],
+      [xs[xIndex - 1]!, zs[zIndex]!, xs[xIndex]!, zs[zIndex - 1]!]
+    ] as const
+    for (const [fromX, fromZ, toX, toZ] of diagonals) {
+      const from = graph.indexOf(nodeId(fromX, fromZ))
+      const to = graph.indexOf(nodeId(toX, toZ))
+      if (
+        from === undefined ||
+        to === undefined ||
+        !groundPathIsClear(obstacles, fromX, fromZ, toX, toZ, bodyRadius)
+      ) continue
+      graph.addEdge(from, to, layoutZoneAt(layout, (fromX + toX) / 2, (fromZ + toZ) / 2))
+    }
   }
   const baseNodeCount = graph.nodes.length
   const addAccessLeaf = (accessX: number, accessZ: number, zoneId?: string): void => {
@@ -162,7 +178,7 @@ export function deriveLayout(input: unknown): DerivedLayout {
     layout,
     railGraph: buildRailGraph(layout),
     roadGraph: buildGroundGraph(layout, 0.64, groundObstacleIndex),
-    walkGraph: buildGroundGraph(layout, 0.28, groundObstacleIndex),
+    walkGraph: buildGroundGraph(layout, 0.28, groundObstacleIndex, true),
     bayCenters,
     equipmentPositions,
     groundObstacles,

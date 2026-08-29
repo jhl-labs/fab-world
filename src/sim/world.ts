@@ -1498,7 +1498,7 @@ export class SimWorld {
   }
   poseSnapshot(): { buffer: ArrayBuffer; generation: number; entityCount: number; simTimeMs: number } {
     const front = this.frontBuffer * MAX_ENTITIES * POSE_STRIDE
-    return { buffer: this.pose.slice(front, front + MAX_ENTITIES * POSE_STRIDE).buffer, generation: this.fallbackGeneration, entityCount: this.entities.length, simTimeMs: Math.round(this.simTime * 1000) }
+    return { buffer: this.pose.slice(front, front + this.entities.length * POSE_STRIDE).buffer, generation: this.fallbackGeneration, entityCount: this.entities.length, simTimeMs: Math.round(this.simTime * 1000) }
   }
   log(message: string): void { this.events.push({ type: 'log', message }) }
   drainEvents(): SimEvent[] { return this.events.splice(0) }

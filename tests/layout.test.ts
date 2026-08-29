@@ -13,6 +13,16 @@ describe('default fab layout', () => {
     expect(layout.railGraph.nodes.length).toBeGreaterThan(100)
     expect(layout.equipmentPositions.has('lithography-001')).toBe(true)
   })
+  it('connects obstacle-clear pedestrian intersections diagonally', () => {
+    const layout = deriveLayout(layoutJson)
+    const diagonalEdges = layout.walkGraph.edges.flatMap((edges, from) => edges.filter(({ to }) => {
+      const start = layout.walkGraph.nodes[from]!
+      const end = layout.walkGraph.nodes[to]!
+      return Math.abs(start.x - end.x) > 0.1 && Math.abs(start.z - end.z) > 0.1
+    }))
+
+    expect(diagonalEdges.length).toBeGreaterThan(20)
+  })
   it('routes safe traffic around a real danger zone while allowing occupants to exit it', () => {
     const layout = deriveLayout(layoutJson)
     const dangerZone = layout.layout.zones[0]!.id

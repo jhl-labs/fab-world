@@ -25,6 +25,7 @@ const comparisonSeed = 20260729
 const clock = new SimulationClock()
 let lastFrame = performance.now()
 let lastMetrics = 0
+let lastFallbackPose = 0
 let lastEquipmentSignature = ''
 
 const send = (message: WorkerToMain, transfer?: Transferable[]) => postMessage(message, transfer ?? [])
@@ -35,6 +36,7 @@ const createWorld = (seed: number): SimWorld | undefined => {
   clock.resetAccumulator()
   lastFrame = performance.now()
   lastMetrics = 0
+  lastFallbackPose = 0
   lastEquipmentSignature = ''
   return nextWorld
 }
@@ -89,11 +91,25 @@ const withComparison = (metrics: SimMetrics): SimMetrics => {
 const loop = (): void => {
   const now = performance.now(); const realDt = (now - lastFrame) / 1000; lastFrame = now
   if (world) {
-    const start = performance.now(); clock.advance(realDt, (dt) => world?.tick(dt)); const tickMs = performance.now() - start
+    const start = performance.now()
+    // Never process an unbounded catch-up burst in one worker turn. Small,
+    // repeated slices let pose messages and UI commands interleave with an
+    // expensive evacuation tick instead of producing a visible long freeze.
+    const tickBudget = clock.timeScale >= 12 ? 2 : 1
+    clock.advance(realDt, (dt) => world?.tick(dt), tickBudget)
+    const tickMs = performance.now() - start
     synchronizeComparison(now)
     world.updateRealtime(realDt)
     const events = world.drainEvents(); if (events.length) send({ type: 'event', events })
-    if (!world.sharedPose) { const snapshot = world.poseSnapshot(); send({ type: 'pose', ...snapshot }, [snapshot.buffer]) }
+    // GitHub Pages cannot provide the cross-origin isolation headers needed
+    // for SharedArrayBuffer. Bound transferable pose snapshots to display
+    // cadence instead of allocating and dispatching one on every 4 ms worker
+    // loop; the renderer interpolates between these snapshots.
+    if (!world.sharedPose && now - lastFallbackPose >= 1000 / 60) {
+      lastFallbackPose = now
+      const snapshot = world.poseSnapshot()
+      send({ type: 'pose', ...snapshot }, [snapshot.buffer])
+    }
     if (now - lastMetrics > 250 || events.some((event) => event.type === 'phaseChanged')) {
       lastMetrics = now
       send({ type: 'metrics', metrics: withComparison({ ...world.metrics, tickMs }) })

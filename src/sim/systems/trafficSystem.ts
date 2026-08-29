@@ -131,7 +131,22 @@ export function updateTraffic(world: SimWorld): void {
           other.behavior === 'evacuate' &&
           entity.evacuationSlotIndex !== undefined &&
           other.evacuationSlotIndex !== undefined
-        limit = Math.min(limit, entity.maxSpeed * (formingMuster ? (distance < 0.34 ? 0.25 : 0.85) : (distance < 0.42 ? 0.15 : 0.72)))
+        const sharedEvacuationFlow =
+          entity.behavior === 'evacuate' &&
+          other.behavior === 'evacuate' &&
+          !formingMuster
+        if (sharedEvacuationFlow) {
+          const lateral = Math.abs(-Math.sin(entity.yaw) * dx + Math.cos(entity.yaw) * dz)
+          // A nearby evacuee in another flow band is not a queue leader.
+          // Preserve passing speed and only brake hard for a body directly
+          // ahead; movementSystem supplies the proactive lateral pass.
+          const flowFactor = lateral < 0.34
+            ? distance < 0.46 ? 0.3 : 0.82
+            : 0.96
+          limit = Math.min(limit, entity.maxSpeed * flowFactor)
+        } else {
+          limit = Math.min(limit, entity.maxSpeed * (formingMuster ? (distance < 0.34 ? 0.25 : 0.85) : (distance < 0.42 ? 0.15 : 0.72)))
+        }
       }
       else if (entity.kind === 'person' && other.kind === 'humanoid') limit = Math.min(limit, entity.maxSpeed * (distance < 0.55 ? 0.2 : 0.7))
       else if (entity.kind === 'humanoid' && other.kind === 'person') limit = Math.min(limit, distance < 0.85 ? 0 : entity.maxSpeed * 0.45)
