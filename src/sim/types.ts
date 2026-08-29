@@ -113,8 +113,12 @@ export interface MedicalResponseRuntime {
   treatmentCameraEmitted?: boolean
   treatmentStartedAt?: number
   vehicleId?: string
-  stage: 'dispatched' | 'treating' | 'transporting' | 'delivered'
+  stage: 'dispatched' | 'treating' | 'loading' | 'transporting' | 'delivered'
   stageStartedAt: number
+  loadingStartX?: number
+  loadingStartY?: number
+  loadingStartZ?: number
+  loadingStartYaw?: number
 }
 export type EquipmentOperatingState = 'idle' | 'loading' | 'processing' | 'unloading'
 export interface EquipmentRuntime {

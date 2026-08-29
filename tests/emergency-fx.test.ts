@@ -27,13 +27,25 @@ describe('emergency visual effects', () => {
     expect(sourceJet.visible).toBe(true)
     expect(sourceJet.position.z).toBeCloseTo(2.4)
 
-    fx.setState('fire', 'detected', [10, 20])
+    fx.setState('fire', 'detected', [10, 20], [0, 2.8])
+    fx.update(1 / 60)
     expect(sourceJet.visible).toBe(false)
     const flames = scene.getObjectByName('fire-flame-lobes') as THREE.InstancedMesh
     const smoke = scene.getObjectByName('fire-smoke-cloudlets') as THREE.InstancedMesh
+    const innerFlames = scene.getObjectByName('fire-inner-flames') as THREE.InstancedMesh
+    const sparks = scene.getObjectByName('fire-sparks') as THREE.InstancedMesh
+    const heatRipples = scene.getObjectByName('fire-heat-ripples') as THREE.InstancedMesh
+    const emberGlow = scene.getObjectByName('fire-ember-glow') as THREE.Mesh
     expect(flames.visible).toBe(true)
     expect(flames.geometry.getAttribute('position').count).toBeGreaterThan(120)
     expect(smoke.geometry.getAttribute('position').count).toBeGreaterThan(300)
+    expect(innerFlames.visible).toBe(true)
+    expect(sparks.count).toBeGreaterThanOrEqual(30)
+    expect(heatRipples.visible).toBe(true)
+    expect(emberGlow.position.z).toBeCloseTo(2.8)
+    flames.getMatrixAt(0, matrix)
+    position.setFromMatrixPosition(matrix)
+    expect(position.z).toBeGreaterThan(2)
 
     fx.setState('medical', 'response', [4, 8])
     fx.update(1 / 60)

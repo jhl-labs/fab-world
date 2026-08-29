@@ -71,32 +71,118 @@ function updateMedicalResponse(world: SimWorld): void {
   if (
     response.stage === 'treating' &&
     response.treatmentStartedAt !== undefined &&
-    world.simTime - response.treatmentStartedAt >= 30 &&
+    world.simTime - response.treatmentStartedAt >= 10 &&
     vehicle &&
     Math.hypot(vehicle.x - hazard.sourceX, vehicle.z - hazard.sourceZ) < 3
   ) {
-    response.stage = 'transporting'
+    response.stage = 'loading'
     response.stageStartedAt = world.simTime
-    const station = world.layout.layout.emergency.medicalStation.position
-    vehicle.auxA = 1
-    vehicle.goalX = station[0]; vehicle.goalZ = station[2]; vehicle.route = []; vehicle.routeCursor = 0; vehicle.targetX = Number.NaN; vehicle.targetZ = Number.NaN
-    if (victim) victim.carriedById = vehicle.id
+    vehicle.speed = 0
+    vehicle.auxA = 0
+    vehicle.goalX = vehicle.x; vehicle.goalZ = vehicle.z; vehicle.route = []; vehicle.routeCursor = 0; vehicle.targetX = vehicle.x; vehicle.targetZ = vehicle.z
+    if (victim) {
+      response.loadingStartX = victim.x
+      response.loadingStartY = victim.y
+      response.loadingStartZ = victim.z
+      response.loadingStartYaw = victim.yaw
+      victim.carriedById = vehicle.id
+    }
+    world.events.push({
+      type: 'interaction',
+      robotId: vehicle.id,
+      personId: victim?.id,
+      message: '구조 인력이 환자를 구급 IGV의 전동 들것에 탑승시킵니다.',
+      data: {
+        interactionKind: 'medical_loading_started',
+        robotX: vehicle.x,
+        robotZ: vehicle.z,
+        personX: victim?.x ?? hazard.sourceX,
+        personZ: victim?.z ?? hazard.sourceZ,
+        patientId: victim?.id ?? response.victimId,
+        patientX: victim?.x ?? hazard.sourceX,
+        patientZ: victim?.z ?? hazard.sourceZ
+      }
+    })
     for (const responder of responders) {
       responder.behavior = 'yield'
       responder.goalX = responder.x + Math.cos(responder.yaw + Math.PI / 2) * 4
       responder.goalZ = responder.z + Math.sin(responder.yaw + Math.PI / 2) * 4
       responder.route = []; responder.routeCursor = 0; responder.targetX = Number.NaN; responder.targetZ = Number.NaN
     }
-    world.events.push({ type: 'hudMessage', message: '환자를 구급 IGV에 인계해 의무실로 이송합니다.', data: { severity: 'info' } })
+  }
+  if (response.stage === 'loading' && vehicle) {
+    const elapsed = world.simTime - response.stageStartedAt
+    const progress = Math.min(1, elapsed / 4)
+    const eased = progress * progress * (3 - 2 * progress)
+    vehicle.speed = 0
+    vehicle.auxA = progress
+    if (victim) {
+      const targetX = vehicle.x + Math.cos(vehicle.yaw) * 0.72
+      const targetZ = vehicle.z + Math.sin(vehicle.yaw) * 0.72
+      victim.x = (response.loadingStartX ?? victim.x) + (targetX - (response.loadingStartX ?? victim.x)) * eased
+      victim.y = (response.loadingStartY ?? victim.y) + (vehicle.y + 1.25 - (response.loadingStartY ?? victim.y)) * eased
+      victim.z = (response.loadingStartZ ?? victim.z) + (targetZ - (response.loadingStartZ ?? victim.z)) * eased
+      victim.yaw = (response.loadingStartYaw ?? victim.yaw) + (vehicle.yaw - (response.loadingStartYaw ?? victim.yaw)) * eased
+    }
+    if (progress >= 1) {
+      response.stage = 'transporting'
+      response.stageStartedAt = world.simTime
+      const station = world.layout.layout.emergency.medicalStation.position
+      vehicle.auxA = 1
+      vehicle.goalX = station[0]; vehicle.goalZ = station[2]; vehicle.route = []; vehicle.routeCursor = 0; vehicle.targetX = Number.NaN; vehicle.targetZ = Number.NaN
+      world.events.push({
+        type: 'interaction',
+        robotId: vehicle.id,
+        personId: victim?.id,
+        message: '환자를 고정하고 의료 안전 구역으로 긴급 이송을 시작합니다.',
+        data: {
+          interactionKind: 'medical_transport_started',
+          robotX: vehicle.x,
+          robotZ: vehicle.z,
+          personX: victim?.x ?? vehicle.x,
+          personZ: victim?.z ?? vehicle.z,
+          patientId: victim?.id ?? response.victimId,
+          patientX: victim?.x ?? vehicle.x,
+          patientZ: victim?.z ?? vehicle.z,
+          stationX: station[0],
+          stationZ: station[2]
+        }
+      })
+      world.events.push({ type: 'hudMessage', message: '환자를 구급 IGV에 탑승시켜 의료 안전 구역으로 이송합니다.', data: { severity: 'info' } })
+    }
   }
   if (response.stage === 'transporting' && vehicle) {
-    if (victim) { victim.x = vehicle.x; victim.y = vehicle.y + 0.55; victim.z = vehicle.z; victim.yaw = vehicle.yaw }
+    if (victim) { victim.x = vehicle.x + Math.cos(vehicle.yaw) * 0.72; victim.y = vehicle.y + 1.25; victim.z = vehicle.z + Math.sin(vehicle.yaw) * 0.72; victim.yaw = vehicle.yaw }
     const station = world.layout.layout.emergency.medicalStation.position
     if (Math.hypot(vehicle.x - station[0], vehicle.z - station[2]) < 2) {
       response.stage = 'delivered'
       response.stageStartedAt = world.simTime
+      vehicle.speed = 0; vehicle.goalX = vehicle.x; vehicle.goalZ = vehicle.z; vehicle.targetX = vehicle.x; vehicle.targetZ = vehicle.z; vehicle.auxA = 1
+      world.events.push({
+        type: 'interaction',
+        robotId: vehicle.id,
+        personId: victim?.id,
+        message: '구급 IGV가 의료 안전 구역에 도착해 환자 인계를 시작합니다.',
+        data: {
+          interactionKind: 'medical_transport_arrived',
+          robotX: vehicle.x,
+          robotZ: vehicle.z,
+          personX: victim?.x ?? vehicle.x,
+          personZ: victim?.z ?? vehicle.z,
+          patientId: victim?.id ?? response.victimId,
+          patientX: victim?.x ?? vehicle.x,
+          patientZ: victim?.z ?? vehicle.z,
+          stationX: station[0],
+          stationZ: station[2]
+        }
+      })
+      world.events.push({ type: 'hudMessage', message: '환자가 의료 안전 구역에 도착했습니다. 인계 절차를 진행합니다.', data: { severity: 'info' } })
+    }
+  }
+  if (response.stage === 'delivered' && vehicle && world.simTime - response.stageStartedAt >= 4) {
+      const station = world.layout.layout.emergency.medicalStation.position
       vehicle.mission = undefined; vehicle.behavior = 'normal'; vehicle.emergency = false; vehicle.maxSpeed = 1.7; vehicle.auxA = 0
-      if (victim) { victim.x = station[0]; victim.y = 0.9; victim.z = station[2]; victim.behavior = 'normal'; victim.emergency = false; victim.personActivity = 'idle'; victim.animation = 0; victim.carriedById = undefined }
+      if (victim) { victim.x = station[0] + 2.2; victim.y = 0.9; victim.z = station[2]; victim.behavior = 'normal'; victim.emergency = false; victim.personActivity = 'idle'; victim.animation = 0; victim.carriedById = undefined }
       for (const responder of responders) {
         responder.behavior = 'normal'
         responder.emergency = false
@@ -106,9 +192,8 @@ function updateMedicalResponse(world: SimWorld): void {
         responder.auxA = 0
         responder.auxB = 0
       }
-      world.events.push({ type: 'hudMessage', message: '환자가 의무실에 인계되었습니다. 현장 통제를 해제합니다.', data: { severity: 'info' } })
+      world.events.push({ type: 'hudMessage', message: '환자가 의료진에게 인계되었습니다. 현장 통제를 해제합니다.', data: { severity: 'info' } })
       world.setPhase('allClear')
-    }
   }
 }
 

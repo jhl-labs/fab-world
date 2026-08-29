@@ -1,4 +1,5 @@
 import { MAX_ENTITIES, type EntityKind } from '../core/protocol'
+import { equipmentAccessPoint } from '../core/layout'
 import type { SimEntity } from './types'
 import type { SimWorld } from './world'
 
@@ -35,6 +36,12 @@ function spawnMany(world: SimWorld, kind: EntityKind, count: number, role?: SimE
     const startX = kind === 'humanoid' ? station?.[0] ?? base[0] + number * 2.2 : Number.NaN
     const startZ = kind === 'humanoid' ? station?.[2] ?? base[2] + 3 : Number.NaN
     const randomNode = world.rng.int(0, graph.nodes.length)
+    const equipment = kind === 'arm'
+      ? world.layout.layout.bays.flatMap((bay) => bay.equipment)[(number * 37) % world.layout.layout.bays.flatMap((bay) => bay.equipment).length]
+      : undefined
+    // Mount the pedestal outside the cabinet envelope while keeping the
+    // articulated reach aimed at its first load port.
+    const equipmentPoint = equipment ? equipmentAccessPoint(equipment, 1.8) : undefined
     const node = kind === 'humanoid'
       ? graph.nodes[graph.nearest(startX, startZ)]!
       : kind === 'agv' || kind === 'igv'
@@ -43,14 +50,16 @@ function spawnMany(world: SimWorld, kind: EntityKind, count: number, role?: SimE
         ? station
           ? findNearestUnoccupiedPersonNode(world, graph.nodes, station[0], station[2])
           : findUnoccupiedPersonNode(world, graph.nodes, randomNode)
-        : graph.nodes[randomNode]!
+        : kind === 'arm' && equipmentPoint
+          ? { x: equipmentPoint[0], z: equipmentPoint[1] }
+          : graph.nodes[randomNode]!
     const y = kind === 'oht' ? world.layout.layout.ohtRail.height - 0.45 : kind === 'person' ? 0.9 : kind === 'arm' ? 1 : kind === 'humanoid' ? 0 : 0.35
     const personProfile = kind === 'person' ? buildPersonMotionProfile(index, role) : undefined
     const preferredSpeed = personProfile?.preferredSpeed ?? maxSpeed[kind]
     const entity: SimEntity = {
       id: `${kind}-${String(kindOffset + number + 1).padStart(3, '0')}`, index, kind, role,
       name: kind === 'humanoid' ? `H${number + 1} ${number === 0 ? '점검 휴머노이드' : '안전 대응 휴머노이드'}` : role ? `${role === 'responder' ? '방재요원' : role === 'engineer' ? '엔지니어' : '오퍼레이터'} ${number + 1}` : `${kindName[kind]} ${number + 1}`,
-      x: node.x, y, z: node.z, yaw: world.rng.range(-Math.PI, Math.PI), speed: 0,
+      x: node.x, y, z: node.z, yaw: equipment ? Math.atan2(equipment.position[2] - node.z, equipment.position[0] - node.x) : world.rng.range(-Math.PI, Math.PI), speed: 0,
       maxSpeed: preferredSpeed, preferredSpeed, trafficSpeedLimit: preferredSpeed, waitTicks: 0,
       status: 'idle', behavior: 'normal', targetX: Number.NaN, targetZ: Number.NaN, targetIndex: world.rng.int(0, Math.max(1, graph.nodes.length)),
       route: [], routeCursor: 0, targetDelay: 0, animation: 0, animationPhase: world.rng.next(), emergency: false,

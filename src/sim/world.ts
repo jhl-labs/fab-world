@@ -2018,7 +2018,8 @@ export class SimWorld {
         (entity.taskId ? PoseFlags.HAS_TASK : 0) |
         (entity.activity === 'safeStop' || entity.status === 'error' ? PoseFlags.SAFE_STOP : 0) |
         (measuredHandPose ? PoseFlags.MEASURED_HAND_POSE : 0) |
-        (entity.evacuationGuiding && entity.activity !== 'manipulating' && entity.status !== 'error' ? PoseFlags.EVACUATION_GUIDE : 0)
+        (entity.evacuationGuiding && entity.activity !== 'manipulating' && entity.status !== 'error' ? PoseFlags.EVACUATION_GUIDE : 0) |
+        (entity.mission === 'medical-transport' ? PoseFlags.MEDICAL_TRANSPORT : 0)
       this.pose[slot + PoseSlot.AUX_A] = entity.auxA; this.pose[slot + PoseSlot.AUX_B] = entity.auxB
       this.pose[slot + PoseSlot.LEFT_HAND_X] = entity.measuredLeftHandPosition?.[0] ?? 0
       this.pose[slot + PoseSlot.LEFT_HAND_Y] = entity.measuredLeftHandPosition?.[1] ?? 0

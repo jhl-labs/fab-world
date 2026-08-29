@@ -6,6 +6,8 @@ import { AgentRenderer } from './agents/agentRenderer'
 import { CarrierRenderer } from './agents/carrierRenderer'
 import { ContactShadowRenderer } from './agents/contactShadowRenderer'
 import { HumanoidRenderer } from './agents/humanoidRenderer'
+import { IndustrialArmRenderer } from './agents/industrialArmRenderer'
+import { MedicalTransportRenderer } from './agents/medicalTransportRenderer'
 import { PersonRenderer } from './agents/personRenderer'
 import { CameraController, type CameraMode } from './camera/controller'
 import { buildShotAnchors, buildShotObstacles, planInteractionOrbit, planShotOrbit, type ShotAnchor, type ShotObstacle } from './camera/shotPlanner'
@@ -26,6 +28,8 @@ interface MedicalEventPose extends InteractionEventPose {
   robotGoalZ?: number
   personGoalX?: number
   personGoalZ?: number
+  stationX?: number
+  stationZ?: number
 }
 
 export class RenderEngine {
@@ -37,6 +41,8 @@ export class RenderEngine {
   private readonly carriers: CarrierRenderer
   private readonly contactShadows: ContactShadowRenderer
   private readonly humanoids: HumanoidRenderer
+  private readonly industrialArms: IndustrialArmRenderer
+  private readonly medicalTransport: MedicalTransportRenderer
   private readonly people: PersonRenderer
   private readonly equipmentStatus: EquipmentStatusRenderer
   private readonly safetyDevices: SafetyDeviceAnimator
@@ -66,18 +72,18 @@ export class RenderEngine {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' }); this.renderer.domElement.setAttribute('aria-hidden', 'true'); this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); this.renderer.setSize(container.clientWidth, container.clientHeight); this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.autoUpdate = true; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1; container.append(this.renderer.domElement)
     this.scene.background = new THREE.Color(0xeef2f7); this.scene.fog = new THREE.Fog(0xeef2f7, 170, 520)
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0xd8dee7, 2.2)); const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(80, 150, 50); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); this.scene.add(sun)
-    this.scene.add(buildFabScene(layout)); this.equipmentStatus = new EquipmentStatusRenderer(this.scene, layout); this.safetyDevices = new SafetyDeviceAnimator(this.scene, layout, entities); this.contactShadows = new ContactShadowRenderer(this.scene, entities); this.agents = new AgentRenderer(this.scene, entities); this.carriers = new CarrierRenderer(this.scene, entities); this.humanoids = new HumanoidRenderer(this.scene, entities); this.people = new PersonRenderer(this.scene, entities); this.fx = new EmergencyFx(this.scene); this.interactionCue = new InteractionCue(this.scene); this.labels = new EntityLabelRenderer(container, entities)
+    this.scene.add(buildFabScene(layout)); this.equipmentStatus = new EquipmentStatusRenderer(this.scene, layout); this.safetyDevices = new SafetyDeviceAnimator(this.scene, layout, entities); this.contactShadows = new ContactShadowRenderer(this.scene, entities); this.agents = new AgentRenderer(this.scene, entities); this.industrialArms = new IndustrialArmRenderer(this.scene, entities); this.carriers = new CarrierRenderer(this.scene, entities); this.medicalTransport = new MedicalTransportRenderer(this.scene, entities); this.humanoids = new HumanoidRenderer(this.scene, entities); this.people = new PersonRenderer(this.scene, entities); this.fx = new EmergencyFx(this.scene); this.interactionCue = new InteractionCue(this.scene); this.labels = new EntityLabelRenderer(container, entities)
     this.camera = new CameraController(this.renderer.domElement, layout.fab, onUserCameraModeChange)
     this.shotAnchors = buildShotAnchors(layout)
     this.shotObstacles = buildShotObstacles(layout)
     const first = layout.bays.flatMap((bay) => bay.equipment).find((equipment) => equipment.hazardCapable) ?? layout.bays[0]!.equipment[0]!; this.source = [first.position[0], first.position[2]]
     this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(container)
     let firstFrame = true
-    const frame = (): void => { if (!this.active) return; requestAnimationFrame(frame); const now = performance.now(); const dt = Math.min((now - this.lastRenderAt) / 1000, 0.1); this.lastRenderAt = now; this.reader.update(); this.contactShadows.update(this.reader); this.agents.update(this.reader); this.carriers.update(this.reader); this.humanoids.update(this.reader); this.people.update(this.reader); this.safetyDevices.update(this.reader); this.interactionCue.update(this.reader); this.camera.update(dt, this.reader); this.labels.update(this.reader, this.camera.camera); this.fx.update(dt); this.renderer.render(this.scene, this.camera.camera); if (firstFrame) { this.renderer.shadowMap.autoUpdate = false; firstFrame = false } this.frames++; this.frameWindow += dt; if (this.frameWindow >= 1) { this.stats = { fps: Math.round(this.frames / this.frameWindow), drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles }; onStats?.(this.stats); this.frames = 0; this.frameWindow = 0 } }
+    const frame = (): void => { if (!this.active) return; requestAnimationFrame(frame); const now = performance.now(); const dt = Math.min((now - this.lastRenderAt) / 1000, 0.1); this.lastRenderAt = now; this.reader.update(); this.contactShadows.update(this.reader); this.agents.update(this.reader); this.industrialArms.update(this.reader); this.carriers.update(this.reader); this.medicalTransport.update(this.reader); this.humanoids.update(this.reader); this.people.update(this.reader); this.safetyDevices.update(this.reader); this.interactionCue.update(this.reader); this.camera.update(dt, this.reader); this.labels.update(this.reader, this.camera.camera); this.fx.update(dt); this.renderer.render(this.scene, this.camera.camera); if (firstFrame) { this.renderer.shadowMap.autoUpdate = false; firstFrame = false } this.frames++; this.frameWindow += dt; if (this.frameWindow >= 1) { this.stats = { fps: Math.round(this.frames / this.frameWindow), drawCalls: this.renderer.info.render.calls, triangles: this.renderer.info.render.triangles }; onStats?.(this.stats); this.frames = 0; this.frameWindow = 0 } }
     frame()
   }
   acceptFallbackPose(buffer: ArrayBuffer, generation: number, entityCount: number, simTimeMs: number): void { this.reader.acceptFallback(buffer, generation, entityCount, simTimeMs) }
-  select(entity?: EntityMeta): void { this.agents.select(entity?.index); this.people.select(entity?.index); if (entity) this.camera.follow(entity) }
+  select(entity?: EntityMeta): void { this.agents.select(entity?.index); this.industrialArms.select(entity?.index); this.people.select(entity?.index); if (entity) this.camera.follow(entity) }
   setCameraMode(mode: CameraMode): void { this.camera.setMode(mode) }
   setTimeScale(value: number): void { this.labels.setTimeScale(value) }
   setEntityLabelBadge(entityId: string, badge?: string): void { this.labels.setBadge(entityId, badge) }
@@ -86,6 +92,33 @@ export class RenderEngine {
   }
   cueMedicalHandoff(robot: EntityMeta, responder: EntityMeta, patient?: EntityMeta, eventPose?: MedicalEventPose): void {
     this.cuePersonInteraction(robot, responder, eventPose, 'medical_handoff', patient)
+  }
+  cueMedicalTransport(
+    vehicle: EntityMeta,
+    patient: EntityMeta | undefined,
+    stage: 'loading' | 'transporting' | 'arrived',
+    eventPose?: Partial<MedicalEventPose>
+  ): void {
+    if (stage === 'transporting') {
+      this.select(vehicle)
+      return
+    }
+    const vehiclePose = this.reader.pose(vehicle.index)
+    const patientPose = patient ? this.reader.pose(patient.index) : undefined
+    const vehicleX = eventPose?.robotX ?? vehiclePose.x
+    const vehicleZ = eventPose?.robotZ ?? vehiclePose.z
+    const patientX = eventPose?.patientX ?? patientPose?.x ?? vehicleX
+    const patientZ = eventPose?.patientZ ?? patientPose?.z ?? vehicleZ
+    const focusX = stage === 'arrived' ? eventPose?.stationX ?? vehicleX : (vehicleX + patientX) / 2
+    const focusZ = stage === 'arrived' ? eventPose?.stationZ ?? vehicleZ : (vehicleZ + patientZ) / 2
+    this.camera.orbitTo(
+      focusX,
+      focusZ,
+      stage === 'arrived' ? 12.5 : 10.5,
+      stage === 'arrived' ? 1.05 : 1.16,
+      -vehiclePose.yaw + Math.PI / 2,
+      0.72
+    )
   }
   cueGasMonitoring(robot: EntityMeta, spotter: EntityMeta, eventPose?: InteractionEventPose): void {
     this.cuePersonInteraction(robot, spotter, eventPose, 'gas_monitoring')
@@ -160,6 +193,8 @@ export class RenderEngine {
   cueCamera(shot: string, position?: readonly [number, number], entity?: EntityMeta): void {
     if (shot === 'follow' && entity) { this.select(entity); return }
     if (!position) return
+    const closeupEquipment = shot === 'closeup' && !entity ? this.layoutEquipmentAt(position) : undefined
+    if (closeupEquipment) position = equipmentAccessPoint(closeupEquipment, 1.15)
     const pose = entity ? this.reader.pose(entity.index) : undefined
     const valveCloseup = shot === 'valve-closeup'
     const closeup = shot === 'closeup' || valveCloseup
@@ -196,10 +231,10 @@ export class RenderEngine {
   setEmergency(kind: EmergencyKind | undefined, phase: EmergencyPhase, position?: readonly [number, number]): void {
     if (phase === 'normal') this.safetyDevices.reset()
     const incidentPosition = position ?? this.source
-    const sourceEquipment = kind === 'gasLeak'
+    const sourceEquipment = kind === 'gasLeak' || kind === 'fire'
       ? this.layoutEquipmentAt(incidentPosition)
       : undefined
-    const access = sourceEquipment ? equipmentAccessPoint(sourceEquipment) : undefined
+    const access = sourceEquipment ? equipmentAccessPoint(sourceEquipment, kind === 'fire' ? 1.15 : 0) : undefined
     const emitterOffset = access
       ? [access[0] - incidentPosition[0], access[1] - incidentPosition[1]] as const
       : undefined
@@ -207,7 +242,7 @@ export class RenderEngine {
   }
   setHazardRadius(radius: number): void { this.fx.setRadius(radius) }
   setEquipmentStates(states: EquipmentStateView[]): void { this.equipmentStatus.setStates(states) }
-  dispose(): void { this.active = false; this.resizeObserver.disconnect(); this.labels.dispose(); this.equipmentStatus.dispose(); this.contactShadows.dispose(); this.agents.dispose(); this.carriers.dispose(); this.humanoids.dispose(); this.people.dispose(); this.interactionCue.dispose(); this.fx.dispose(); this.renderer.dispose(); this.renderer.domElement.remove() }
+  dispose(): void { this.active = false; this.resizeObserver.disconnect(); this.labels.dispose(); this.equipmentStatus.dispose(); this.contactShadows.dispose(); this.agents.dispose(); this.industrialArms.dispose(); this.carriers.dispose(); this.medicalTransport.dispose(); this.humanoids.dispose(); this.people.dispose(); this.interactionCue.dispose(); this.fx.dispose(); this.renderer.dispose(); this.renderer.domElement.remove() }
   private resize(): void { const width = Math.max(1, this.container.clientWidth); const height = Math.max(1, this.container.clientHeight); this.renderer.setSize(width, height); this.camera.camera.aspect = width / height; this.camera.camera.updateProjectionMatrix() }
   private layoutEquipmentAt(position: readonly [number, number]): FabLayout['bays'][number]['equipment'][number] | undefined {
     return this.layout.bays

@@ -4,8 +4,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { PoseFlags, type EntityKind, type EntityMeta } from '../../core/protocol'
 import { PoseReader } from '../interpolate'
 
-type InstancedKind = Exclude<EntityKind, 'humanoid' | 'person'>
-const colors: Record<InstancedKind, number> = { oht: 0x3f7dc2, agv: 0x4e9f91, igv: 0x7896d9, arm: 0xf5c542 }
+type InstancedKind = Exclude<EntityKind, 'humanoid' | 'person' | 'arm'>
+const colors: Record<InstancedKind, number> = { oht: 0x3f7dc2, agv: 0x4e9f91, igv: 0x7896d9 }
 
 interface GeometryPart {
   geometry: THREE.BufferGeometry
@@ -54,11 +54,7 @@ function baseGeometry(kind: InstancedKind): THREE.BufferGeometry {
     { geometry: roundedBox(0.18, 0.3, 1.22, 0.055), position: [-0.84, -0.06, 0] },
     { geometry: new THREE.BoxGeometry(1.28, 0.07, 1.23), position: [0, -0.31, 0] }
   ])
-  return mergeParts([
-    { geometry: new THREE.CylinderGeometry(0.5, 0.57, 0.26, 14), position: [0, -0.7, 0] },
-    { geometry: new THREE.CylinderGeometry(0.34, 0.42, 0.72, 14), position: [0, -0.24, 0] },
-    { geometry: new THREE.SphereGeometry(0.31, 12, 8), position: [0, 0.12, 0] }
-  ])
+  throw new Error(`Unsupported mobile agent kind: ${kind}`)
 }
 
 interface DetailLayer {
@@ -138,22 +134,7 @@ function detailLayers(kind: InstancedKind, count: number): DetailLayer[] {
       { geometry: new THREE.TorusGeometry(0.135, 0.014, 5, 12), position: [0, -0.055, 0], rotation: [Math.PI / 2, 0, 0] }
     ]), 0x2ee6e6, 0.57, true)
   ]
-  return [
-    make(mergeParts([
-      { geometry: new THREE.CylinderGeometry(0.48, 0.55, 0.2, 14) },
-      { geometry: new THREE.TorusGeometry(0.38, 0.045, 6, 14), position: [0, 0.12, 0], rotation: [Math.PI / 2, 0, 0] }
-    ]), 0x2d3b48, 0.1),
-    make(mergeParts([
-      { geometry: new THREE.CapsuleGeometry(0.1, 0.72, 3, 8), position: [0.12, 0, 0], rotation: [0, 0, -0.45] },
-      { geometry: new THREE.SphereGeometry(0.18, 10, 8), position: [0.33, 0.36, 0] },
-      { geometry: new THREE.CapsuleGeometry(0.085, 0.58, 3, 8), position: [0.52, 0.61, 0], rotation: [0, 0, 0.9] }
-    ]), 0xe5ae33, 1.22),
-    make(mergeParts([
-      { geometry: roundedBox(0.46, 0.11, 0.15, 0.035) },
-      { geometry: new THREE.CylinderGeometry(0.07, 0.07, 0.26, 10), position: [0.27, 0, 0], rotation: [Math.PI / 2, 0, 0] },
-      { geometry: new THREE.SphereGeometry(0.075, 10, 7), position: [0.27, 0, 0.17] }
-    ]), 0x58c8e8, 1.84, true)
-  ]
+  throw new Error(`Unsupported mobile agent kind: ${kind}`)
 }
 
 export class AgentRenderer {
@@ -166,7 +147,7 @@ export class AgentRenderer {
   private readonly position = new THREE.Vector3()
   private selected?: number
   constructor(private readonly scene: THREE.Scene, entities: EntityMeta[]) {
-    const kinds: InstancedKind[] = ['oht', 'agv', 'igv', 'arm']
+    const kinds: InstancedKind[] = ['oht', 'agv', 'igv']
     for (const kind of kinds) {
       const members = entities.filter((entity) => entity.kind === kind); this.members.set(kind, members)
       const material = new THREE.MeshStandardMaterial({ color: colors[kind], roughness: 0.36, metalness: 0.4, emissive: 0x000000 })

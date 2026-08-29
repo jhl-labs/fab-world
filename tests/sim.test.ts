@@ -1681,13 +1681,24 @@ describe('SimWorld', () => {
       event.data?.interactionKind === 'medical_treatment_started' &&
       event.data?.patientId === response.victimId
     )).toBe(true)
-    response.treatmentStartedAt = world.simTime - 30
+    response.treatmentStartedAt = world.simTime - 10
+    world.tick(1 / 60)
+    expect(response.stage).toBe('loading')
+    expect(world.events.some((event) => event.data?.interactionKind === 'medical_loading_started')).toBe(true)
+    const patient = world.entities.find((entity) => entity.id === response.victimId)!
+    response.stageStartedAt = world.simTime - 4
     world.tick(1 / 60)
     expect(response.stage).toBe('transporting')
+    expect(patient.y).toBeGreaterThan(vehicle.y + 1)
+    expect(world.events.some((event) => event.data?.interactionKind === 'medical_transport_started')).toBe(true)
     const station = layout.emergency.medicalStation.position
     vehicle.x = station[0]; vehicle.z = station[2]
     world.tick(1 / 60)
     expect(response.stage).toBe('delivered')
+    expect(world.events.some((event) => event.data?.interactionKind === 'medical_transport_arrived')).toBe(true)
+    expect(world.emergency.phase).toBe('response')
+    response.stageStartedAt = world.simTime - 4
+    world.tick(1 / 60)
     expect(world.emergency.phase).toBe('allClear')
   })
   it('keeps RMF task state synchronized with the assigned humanoid', () => {

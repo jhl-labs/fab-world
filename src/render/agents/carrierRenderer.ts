@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import type { EntityMeta } from '../../core/protocol'
+import { PoseFlags, type EntityMeta } from '../../core/protocol'
 import type { PoseReader } from '../interpolate'
 
 export class CarrierRenderer {
@@ -29,7 +29,7 @@ export class CarrierRenderer {
   update(reader: PoseReader): void {
     this.vehicles.forEach((entity, index) => {
       const pose = reader.pose(entity.index)
-      const visible = pose.auxA > 0.5
+      const visible = pose.auxA > 0.5 && (pose.flags & PoseFlags.MEDICAL_TRANSPORT) === 0
       const hoistDrop = entity.kind === 'oht' ? (1 - pose.auxB) * 2.5 : 0
       this.position.set(pose.x, pose.y + (entity.kind === 'oht' ? -0.48 - hoistDrop : 0.48), pose.z)
       this.rotation.setFromAxisAngle(this.yAxis, -pose.yaw)

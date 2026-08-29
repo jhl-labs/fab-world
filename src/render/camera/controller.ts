@@ -58,17 +58,26 @@ export class CameraController {
     // At 24m a humanoid becomes a dot against the fab floor. The showcase is
     // about its work, so keep a human-scale following distance while retaining
     // a wider view for material-handling vehicles.
-    if (entity) this.distance = entity.kind === 'humanoid' ? 14 : entity.kind === 'person' ? 11 : entity.kind === 'oht' ? 28 : 20
+    if (entity) this.distance = entity.kind === 'humanoid' ? 14 : entity.kind === 'person' ? 11 : entity.kind === 'arm' ? 12 : entity.kind === 'oht' ? 28 : 20
   }
   update(dt: number, reader: PoseReader): void {
     if (this.mode === 'follow' && this.target) {
       const pose = reader.pose(this.target.index)
-      const focusHeight = this.target.kind === 'humanoid' ? 1.05 : this.target.kind === 'person' ? 0.8 : 0.45
-      const desired = new THREE.Vector3(
-        pose.x - Math.cos(pose.yaw) * this.distance * 0.55,
-        pose.y + focusHeight + this.distance * 0.25,
-        pose.z - Math.sin(pose.yaw) * this.distance * 0.55
-      )
+      const focusHeight = this.target.kind === 'humanoid' ? 1.05 : this.target.kind === 'person' ? 0.8 : this.target.kind === 'arm' ? 1.2 : 0.45
+      // Process tools often sit directly behind an arm's working direction.
+      // A side three-quarter follow angle keeps every joint visible instead
+      // of placing another cabinet between the camera and the pedestal.
+      const desired = this.target.kind === 'arm'
+        ? new THREE.Vector3(
+            pose.x - Math.cos(pose.yaw) * 2 - Math.sin(pose.yaw) * 7.5,
+            pose.y + 4.7,
+            pose.z - Math.sin(pose.yaw) * 2 + Math.cos(pose.yaw) * 7.5
+          )
+        : new THREE.Vector3(
+            pose.x - Math.cos(pose.yaw) * this.distance * 0.55,
+            pose.y + focusHeight + this.distance * 0.25,
+            pose.z - Math.sin(pose.yaw) * this.distance * 0.55
+          )
       const focus = new THREE.Vector3(pose.x, pose.y + focusHeight, pose.z)
       if (this.snapFollow) {
         this.camera.position.copy(desired)

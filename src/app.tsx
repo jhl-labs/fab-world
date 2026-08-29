@@ -351,7 +351,38 @@ export function FabApp(): ReactElement {
             engineRef.current?.cueCamera('valve-closeup', [targetX, targetZ], person)
           }
         }
-        if (item.type === 'interaction' && item.robotId && item.personId) {
+        const medicalTransportKind = item.type === 'interaction' && typeof item.data?.interactionKind === 'string'
+          ? item.data.interactionKind
+          : undefined
+        const isMedicalTransportScene = medicalTransportKind === 'medical_loading_started' ||
+          medicalTransportKind === 'medical_transport_started' ||
+          medicalTransportKind === 'medical_transport_arrived'
+        if (isMedicalTransportScene && item.robotId) {
+          const state = store.getState()
+          const vehicle = state.entities.find((entity) => entity.id === item.robotId)
+          const patientId = typeof item.data?.patientId === 'string' ? item.data.patientId : item.personId
+          const patient = patientId ? state.entities.find((entity) => entity.id === patientId) : undefined
+          if (vehicle) {
+            const stage = medicalTransportKind === 'medical_loading_started'
+              ? 'loading'
+              : medicalTransportKind === 'medical_transport_started'
+                ? 'transporting'
+                : 'arrived'
+            interactionCameraUntilRef.current = performance.now() + (stage === 'transporting' ? 8_000 : 5_500)
+            state.select(vehicle.id)
+            state.setCameraMode(stage === 'transporting' ? 'follow' : 'orbit')
+            engineRef.current?.setEntityLabelBadge(vehicle.id, stage === 'loading' ? '환자 탑승' : stage === 'transporting' ? '응급 환자 이송' : '의료 안전 구역 도착')
+            engineRef.current?.cueMedicalTransport(vehicle, patient, stage, {
+              robotX: typeof item.data?.robotX === 'number' ? item.data.robotX : undefined,
+              robotZ: typeof item.data?.robotZ === 'number' ? item.data.robotZ : undefined,
+              patientX: typeof item.data?.patientX === 'number' ? item.data.patientX : undefined,
+              patientZ: typeof item.data?.patientZ === 'number' ? item.data.patientZ : undefined,
+              stationX: typeof item.data?.stationX === 'number' ? item.data.stationX : undefined,
+              stationZ: typeof item.data?.stationZ === 'number' ? item.data.stationZ : undefined
+            })
+          }
+        }
+        if (item.type === 'interaction' && item.robotId && item.personId && !isMedicalTransportScene) {
           const state = store.getState()
           const robot = state.entities.find((entity) => entity.id === item.robotId)
             const person = state.entities.find((entity) => entity.id === item.personId)
@@ -455,7 +486,7 @@ export function FabApp(): ReactElement {
             : undefined
           const defaultCue = gasPhaseCue ?? (item.kind === 'gasLeak'
             ? undefined
-            : item.phase === 'detected' ? { shot: 'closeup', target: 'hazard-source' } : item.phase === 'alarm' ? { shot: 'aerial', target: 'hazard-zone' } : item.phase === 'response' ? { shot: 'follow', target: 'responder' } : item.phase === 'evacuation' ? { shot: 'follow', target: 'nearest-evacuee' } : item.phase === 'allClear' && item.kind !== 'medical' ? { shot: 'muster', target: 'muster' } : undefined)
+            : item.phase === 'detected' ? { shot: 'closeup', target: 'hazard-source' } : item.phase === 'alarm' ? (item.kind === 'fire' ? { shot: 'closeup', target: 'hazard-source' } : { shot: 'aerial', target: 'hazard-zone' }) : item.phase === 'response' ? { shot: 'follow', target: 'responder' } : item.phase === 'evacuation' ? { shot: 'follow', target: 'nearest-evacuee' } : item.phase === 'allClear' && item.kind !== 'medical' ? { shot: 'muster', target: 'muster' } : undefined)
           const cue = configuredCue ?? defaultCue
           // The detected cue is the opening beat of the gas story. Later gas
           // phases have their own event-driven sequence above, so they remain

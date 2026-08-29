@@ -151,6 +151,7 @@ export function buildFabScene(layout: FabLayout): THREE.Group {
   addFloorSystem(group, layout)
   addExitAwareWalls(group, layout, materials.wall)
   addMusterAreas(group, layout)
+  addMedicalSafeZone(group, layout)
   addFabStructure(group, layout)
   addOhtInfrastructure(group, layout)
   for (const bay of layout.bays) {
@@ -470,6 +471,58 @@ function buildMusterFloorMaterial(): THREE.MeshBasicMaterial {
   context.fillStyle = '#ffffff'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.font = '800 92px sans-serif'; context.fillText('대피 구역  ·  EVACUATION AREA', canvas.width / 2, canvas.height / 2)
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace
   return new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
+}
+
+function addMedicalSafeZone(group: THREE.Group, layout: FabLayout): void {
+  const [x, , z] = layout.emergency.medicalStation.position
+  const zone = new THREE.Group()
+  zone.name = 'medical-safe-zone'
+  const padMaterial = new THREE.MeshStandardMaterial({ color: 0x2f7892, roughness: 0.72, metalness: 0.05 })
+  const boundaryMaterial = new THREE.MeshBasicMaterial({ color: 0x8ee8ff, toneMapped: false })
+  const crossMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
+  addRoundedBox(zone, [7.2, 0.09, 5.2], [x, -0.045, z], 0.24, padMaterial, 'medical-safe-zone-pad')
+  addBox(zone, [7.2, 0.035, 0.14], [x, 0.02, z - 2.52], boundaryMaterial)
+  addBox(zone, [7.2, 0.035, 0.14], [x, 0.02, z + 2.52], boundaryMaterial)
+  addBox(zone, [0.14, 0.035, 5.2], [x - 3.52, 0.02, z], boundaryMaterial)
+  addBox(zone, [0.14, 0.035, 5.2], [x + 3.52, 0.02, z], boundaryMaterial)
+  addBox(zone, [1.65, 0.045, 0.5], [x, 0.03, z], crossMaterial, 'medical-safe-zone-cross-horizontal')
+  addBox(zone, [0.5, 0.045, 1.65], [x, 0.035, z], crossMaterial, 'medical-safe-zone-cross-vertical')
+  addBox(zone, [0.1, 2.8, 0.1], [x - 1.72, 1.38, z + 2.85], materials.frame)
+  addBox(zone, [0.1, 2.8, 0.1], [x + 1.72, 1.38, z + 2.85], materials.frame)
+  const signMaterial = buildMedicalSafeZoneSignMaterial()
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.15, 1.4), signMaterial)
+  sign.name = 'medical-safe-zone-sign'
+  sign.position.set(x, 2.45, z + 2.79)
+  sign.rotation.y = Math.PI
+  sign.userData.keepSeparate = true
+  zone.add(sign)
+  const rear = sign.clone()
+  rear.name = 'medical-safe-zone-sign-rear'
+  rear.position.z = z + 2.91
+  rear.rotation.y = 0
+  zone.add(rear)
+  group.add(zone)
+}
+
+function buildMedicalSafeZoneSignMaterial(): THREE.MeshBasicMaterial {
+  const canvas = document.createElement('canvas')
+  canvas.width = 768
+  canvas.height = 260
+  const context = canvas.getContext('2d')!
+  context.fillStyle = '#176b86'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.strokeStyle = '#a8efff'
+  context.lineWidth = 12
+  context.strokeRect(8, 8, canvas.width - 16, canvas.height - 16)
+  context.fillStyle = '#ffffff'
+  context.textAlign = 'center'
+  context.font = '800 76px sans-serif'
+  context.fillText('의료 안전 구역', canvas.width / 2, 112)
+  context.font = '700 46px sans-serif'
+  context.fillText('MEDICAL SAFE ZONE', canvas.width / 2, 202)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false })
 }
 
 function visualMusterSlots(capacity: number, musterZ: number): Array<readonly [number, number]> {

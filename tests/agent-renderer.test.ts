@@ -4,6 +4,8 @@ import type { EntityMeta } from '../src/core/protocol'
 import { AgentRenderer } from '../src/render/agents/agentRenderer'
 import { CarrierRenderer } from '../src/render/agents/carrierRenderer'
 import { HumanoidRenderer } from '../src/render/agents/humanoidRenderer'
+import { IndustrialArmRenderer } from '../src/render/agents/industrialArmRenderer'
+import { MedicalTransportRenderer } from '../src/render/agents/medicalTransportRenderer'
 import { PersonRenderer } from '../src/render/agents/personRenderer'
 
 describe('procedural agent appearance', () => {
@@ -55,7 +57,7 @@ describe('procedural agent appearance', () => {
     humanoids.dispose()
   })
 
-  it('keeps detailed OHT, vehicles, arms, and carriers inside fixed instanced render layers', () => {
+  it('keeps mobile vehicles instanced while giving industrial arms and medical transport distinct silhouettes', () => {
     const scene = new THREE.Scene()
     const entities: EntityMeta[] = [
       { id: 'oht-test', index: 0, kind: 'oht', name: 'Test OHT' },
@@ -65,23 +67,37 @@ describe('procedural agent appearance', () => {
     ]
 
     const agents = new AgentRenderer(scene, entities)
+    const industrialArms = new IndustrialArmRenderer(scene, entities)
     const carriers = new CarrierRenderer(scene, entities)
+    const medicalTransport = new MedicalTransportRenderer(scene, entities)
     const agentMeshes = scene.children.filter((object): object is THREE.InstancedMesh =>
       object instanceof THREE.InstancedMesh && object.name.startsWith('agent-')
     )
     const carrier = scene.getObjectByName('vehicle-wafer-carriers') as THREE.InstancedMesh
+    const armMeshes = scene.children.filter((object): object is THREE.InstancedMesh =>
+      object instanceof THREE.InstancedMesh && object.name.startsWith('industrial-arm-')
+    )
     const triangles = (geometry: THREE.BufferGeometry): number =>
       (geometry.index?.count ?? geometry.getAttribute('position').count) / 3
 
-    expect(agentMeshes).toHaveLength(16)
-    expect(['oht', 'agv', 'igv', 'arm'].every((kind) =>
+    expect(agentMeshes).toHaveLength(12)
+    expect(['oht', 'agv', 'igv'].every((kind) =>
       scene.getObjectByName(`agent-${kind}-base`) instanceof THREE.InstancedMesh
     )).toBe(true)
+    expect(scene.getObjectByName('agent-arm-base')).toBeUndefined()
+    expect(armMeshes).toHaveLength(11)
+    expect(scene.getObjectByName('industrial-arm-upper')).toBeInstanceOf(THREE.InstancedMesh)
+    expect(scene.getObjectByName('industrial-arm-forearm')).toBeInstanceOf(THREE.InstancedMesh)
+    expect(scene.getObjectByName('industrial-arm-finger-left')).toBeInstanceOf(THREE.InstancedMesh)
+    expect(scene.getObjectByName('medical-transport-stretcher')).toBeInstanceOf(THREE.InstancedMesh)
+    expect(scene.getObjectByName('medical-transport-cross')).toBeInstanceOf(THREE.InstancedMesh)
     expect(agentMeshes.every((mesh) => triangles(mesh.geometry) > 20)).toBe(true)
     expect(carrier).toBeInstanceOf(THREE.InstancedMesh)
     expect(triangles(carrier.geometry)).toBeGreaterThan(100)
 
+    medicalTransport.dispose()
     carriers.dispose()
+    industrialArms.dispose()
     agents.dispose()
   })
 })
