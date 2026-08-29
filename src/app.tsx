@@ -3,15 +3,13 @@ import layoutJson from '../data/layouts/fab-default.json'
 import gasJson from '../data/scenarios/gas-leak.json'
 import fireJson from '../data/scenarios/fire.json'
 import medicalJson from '../data/scenarios/medical.json'
-import referenceRmfTraceUrl from '../data/rmf-traces/humanoid-showcase.json?url'
 import { FabLayoutSchema, ScenarioSchema, type EmergencyKind, type Scenario } from './core/schema'
 import { equipmentAccessPoint } from './core/layout'
 import type { EntityMeta, EquipmentStateView, MainToWorker, WorkerToMain } from './core/protocol'
 import { POSE_FLOATS, POSE_HEADER_INTS } from './core/protocol'
 import type { RenderEngine } from './render/engine'
 import type { CameraMode } from './render/camera/controller'
-import { configuredRmfBridgeUrl, configuredRmfTraceSource, RmfBridgeClient, type RmfConnectionOptions, type RmfTaskConnection } from './integrations/rmf/client'
-import { RmfTracePlayer } from './integrations/rmf/trace'
+import { LocalDemoConnection, type LocalTaskConnection } from './integrations/localDemo'
 import { Hud } from './ui/Hud'
 import { useFabStore } from './ui/store'
 
@@ -29,7 +27,7 @@ export function FabApp(): ReactElement {
   const engineRef = useRef<RenderEngine | undefined>(undefined)
   const workerRef = useRef<Worker | undefined>(undefined)
   const sharedRef = useRef<SharedArrayBuffer | undefined>(undefined)
-  const rmfRef = useRef<RmfTaskConnection | undefined>(undefined)
+  const localTaskRef = useRef<LocalTaskConnection | undefined>(undefined)
   const activeScenarioRef = useRef<Scenario | undefined>(undefined)
   const equipmentStatesRef = useRef<EquipmentStateView[]>([])
   const taskSequenceRef = useRef(1)
@@ -508,7 +506,7 @@ export function FabApp(): ReactElement {
             const target = typeof taskData.targetX === 'number' && typeof taskData.targetZ === 'number'
               ? [taskData.targetX, taskData.targetZ] as [number, number]
               : undefined
-            const accepted = rmfRef.current?.dispatchTask({
+            localTaskRef.current?.dispatchTask({
               id: item.taskId,
               kind: item.taskKind,
               targetId: typeof taskData.targetId === 'string' ? taskData.targetId : undefined,
@@ -517,20 +515,6 @@ export function FabApp(): ReactElement {
               requestedBy: taskData.requestedBy === 'showcase' ? 'showcase' : 'operator',
               priority: typeof taskData.priority === 'number' ? taskData.priority : 70
             })
-            if (accepted === false && state.rmfState !== 'demo') {
-              worker.postMessage({
-                type: 'rmfEvent',
-                event: {
-                  type: 'task_state',
-                  taskId: item.taskId,
-                  category: item.taskKind,
-                  status: 'failed',
-                  ...(typeof taskData.targetId === 'string' ? { targetId: taskData.targetId } : {}),
-                  timestamp: Date.now()
-                }
-              } satisfies MainToWorker)
-              state.addLog(`Open-RMF readiness 미충족으로 ${item.taskId} 배정을 차단했습니다.`, 'danger')
-            }
           }
           if (
             !restored &&
@@ -634,34 +618,13 @@ export function FabApp(): ReactElement {
       }
     }
     worker.postMessage({ type: 'init', layout, seed: 20260729, ...(sab ? { poseBuffer: sab } : {}) } satisfies MainToWorker)
-    const traceSource = configuredRmfTraceSource()
-    const connectionOptions: Omit<RmfConnectionOptions, 'url'> = {
-      onEvent: (rmfEvent) => worker.postMessage({ type: 'rmfEvent', event: rmfEvent } satisfies MainToWorker),
-      onState: (rmfState, detail) => {
-        if (rmfState === 'connecting' || rmfState === 'disconnected' || rmfState === 'demo' || rmfState === 'replay') {
-          store.getState().setRmfBridgeStatus(undefined)
-        }
-        store.getState().setRmfState(rmfState, detail)
-        worker.postMessage({
-          type: 'setRmfConnection',
-          external: rmfState !== 'demo',
-          connected: rmfState === 'connected' || rmfState === 'replay'
-        } satisfies MainToWorker)
-      },
-      onStatus: (status) => store.getState().setRmfBridgeStatus(status)
-    }
-    const rmf: RmfTaskConnection = traceSource
-      ? new RmfTracePlayer({
-          ...connectionOptions,
-          loadTrace: () => fetch(traceSource === 'reference' ? referenceRmfTraceUrl : new URL(traceSource, window.location.href))
-            .then(async (response) => {
-              if (!response.ok) throw new Error(`HTTP ${response.status}`)
-              return response.json() as Promise<unknown>
-            })
-        })
-      : new RmfBridgeClient({ ...connectionOptions, url: configuredRmfBridgeUrl() })
-    rmfRef.current = rmf; rmf.connect()
-    return () => { cancelCinematicSequence(); rmf.disconnect(); rmfRef.current = undefined; engineRef.current?.dispose(); worker.terminate(); workerRef.current = undefined }
+    const localTask = new LocalDemoConnection((rmfState, detail) => {
+      store.getState().setRmfBridgeStatus(undefined)
+      store.getState().setRmfState(rmfState, detail)
+      worker.postMessage({ type: 'setRmfConnection', external: false, connected: false } satisfies MainToWorker)
+    })
+    localTaskRef.current = localTask; localTask.connect()
+    return () => { cancelCinematicSequence(); localTask.disconnect(); localTaskRef.current = undefined; engineRef.current?.dispose(); worker.terminate(); workerRef.current = undefined }
   }, [])
   useEffect(() => {
     if (!ready || !viewportRef.current || engineRef.current) return
@@ -714,7 +677,7 @@ export function FabApp(): ReactElement {
     gasTailRobotShotTaskRef.current = undefined
     gasIsolationVerifiedRef.current = false
     const state = store.getState()
-    rmfRef.current?.cancelTasks(state.humanoidTasks.filter((task) => !['completed', 'failed', 'cancelled'].includes(task.status)).map((task) => task.id))
+    localTaskRef.current?.cancelTasks(state.humanoidTasks.filter((task) => !['completed', 'failed', 'cancelled'].includes(task.status)).map((task) => task.id))
     state.clearHumanoidTasks()
     if (state.timeScale !== 1) {
       state.setTimeScale(1)
@@ -751,7 +714,7 @@ export function FabApp(): ReactElement {
       .filter((task) => !['completed', 'failed', 'cancelled'].includes(task.status))
       .map((task) => task.id)
     if (activeTaskIds.length > 0) {
-      rmfRef.current?.cancelTasks(activeTaskIds)
+      localTaskRef.current?.cancelTasks(activeTaskIds)
       state.addLog(`기존 진행 태스크 ${activeTaskIds.length}건을 취소하고 통합 시연을 다시 준비합니다.`, 'warning')
     }
     state.clearHumanoidTasks()
@@ -773,7 +736,7 @@ export function FabApp(): ReactElement {
     const activeTaskIds = state.humanoidTasks
       .filter((task) => !['completed', 'failed', 'cancelled'].includes(task.status))
       .map((task) => task.id)
-    if (activeTaskIds.length > 0) rmfRef.current?.cancelTasks(activeTaskIds)
+    if (activeTaskIds.length > 0) localTaskRef.current?.cancelTasks(activeTaskIds)
     state.clearHumanoidTasks()
     if (state.timeScale !== 1) {
       state.setTimeScale(1)
@@ -801,7 +764,7 @@ export function FabApp(): ReactElement {
       ['queued', 'assigned', 'navigating', 'observing', 'interacting'].includes(candidate.status)
     )
     if (!task) return
-    rmfRef.current?.cancelTasks([task.id])
+    localTaskRef.current?.cancelTasks([task.id])
     post({ type: 'injectHumanoidFailure' })
   }
   const select = (entity?: EntityMeta): void => {

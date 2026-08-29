@@ -66,7 +66,7 @@ export function Hud(props: HudProps): ReactElement {
         : comparison?.stage === 'transition'
           ? { stage: '동일 조건 A/B · RESET', value: '사람 기준선 결과를 보존하고 동일 초기상태를 복원합니다.' }
           : comparison?.stage === 'humanoid-dispatch'
-            ? { stage: '동일 조건 A/B · B HUMANOID', value: 'Open-RMF 태스크 모델이 휴머노이드를 동일 밸브로 배정합니다.' }
+            ? { stage: '동일 조건 A/B · B HUMANOID', value: '로컬 태스크 모델이 휴머노이드를 동일 밸브로 배정합니다.' }
             : comparison?.stage === 'humanoid-work'
               ? { stage: '동일 조건 A/B · B HUMANOID', value: '사람은 안전 경계에 남고 휴머노이드가 밸브 작업점에 진입합니다.' }
               : { stage: '동일 조건 A/B · VERIFIED', value: `관측 결과: 사람 위험구역 체류 ${avoidedHumanExposure.toFixed(1)} person·sec를 제거했습니다.` }
@@ -81,7 +81,7 @@ export function Hud(props: HudProps): ReactElement {
   const inspectionRobot = showcaseInspection?.robotId
     ? state.entities.find((entity) => entity.id === showcaseInspection.robotId)
     : undefined
-  const inspectionCallsign = inspectionRobot?.name.match(/^H\d+/)?.[0] ?? showcaseInspection?.robotId ?? 'RMF'
+  const inspectionCallsign = inspectionRobot?.name.match(/^H\d+/)?.[0] ?? showcaseInspection?.robotId ?? 'SIM'
   const gasTask = state.humanoidTasks.find((task) => task.kind === 'gas_isolation')
   const gasRobot = gasTask?.robotId
     ? state.entities.find((entity) => entity.id === gasTask.robotId)
@@ -143,12 +143,12 @@ export function Hud(props: HudProps): ReactElement {
           : {
               state: 'blocked',
               label: 'DISPATCH BLOCKED',
-              detail: state.rmfBridgeStatus?.detail || state.rmfDetail || 'Open-RMF readiness 확인 불가'
+              detail: state.rmfBridgeStatus?.detail || state.rmfDetail || '로컬 시뮬레이션 준비 상태 확인 불가'
             }
   const proofSteps: Array<{ key: string; owner: string; label: string; value: string; state: ProofState }> = [
     {
       key: 'rmf',
-      owner: 'OPEN-RMF',
+      owner: 'LOCAL SIM',
       label: '배정·이동',
       value: metrics?.gasRmfAssigned ? `${gasCallsign ?? '로봇'} 격리 배정` : '배정 대기',
       state: metrics?.gasRmfAssigned ? 'complete' : 'pending'
@@ -227,7 +227,7 @@ export function Hud(props: HudProps): ReactElement {
   return <div className="hud">
     <header className="topbar">
       <div><p className="eyebrow">FABWORLD / HUMANOID OPERATIONS</p><h1>Semiconductor Fab</h1></div>
-      <div className={`rmf-state rmf-${state.rmfState}`} role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true" />OPEN-RMF · {state.rmfState === 'connected' ? 'LIVE' : state.rmfState === 'demo' ? 'DEMO' : state.rmfState.toUpperCase()}</div>
+      <div className={`rmf-state rmf-${state.rmfState}`} role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true" />LOCAL SIM · DEMO</div>
       <div className={`phase phase-${state.phase}`} role="status" aria-live="assertive" aria-atomic="true"><span className="pulse" aria-hidden="true" />{state.emergencyKind ? kindLabel[state.emergencyKind] : 'FAB ONLINE'} · {phaseLabel[state.phase]}</div>
       <div className="stats" data-draw-calls={state.stats?.drawCalls ?? 0} data-tick-ms={state.metrics?.tickMs ?? 0}><span>{state.stats?.fps ?? '—'} FPS</span><span>{state.stats?.drawCalls ?? '—'} DRAW</span><span>{state.metrics?.entityCount ?? 0} ENT</span></div>
     </header>
@@ -261,7 +261,7 @@ export function Hud(props: HudProps): ReactElement {
 
     <aside className={`panel mission-panel ${comparisonActive ? 'comparison-active' : ''}`} aria-label="휴머노이드 임무 제어와 안전 증거">
       <p className="panel-title">휴머노이드 목적 기반 데모</p>
-      <button className="showcase-button" disabled={!rmfDispatchReady} onClick={props.onShowcase}><strong>▶ 통합 시연 시작</strong><small>{rmfDispatchReady ? '설비 점검 → 이상 감지 → RMF 재배정 → 가스 격리' : 'Open-RMF preflight 통과 후 시작할 수 있습니다.'}</small></button>
+      <button className="showcase-button" disabled={!rmfDispatchReady} onClick={props.onShowcase}><strong>▶ 통합 시연 시작</strong><small>{rmfDispatchReady ? '설비 점검 → 이상 감지 → 로컬 재배정 → 가스 격리' : '로컬 시뮬레이션 준비 중입니다.'}</small></button>
       <button
         className="comparison-button"
         disabled={state.rmfState !== 'demo' || comparisonRunning}
@@ -275,7 +275,7 @@ export function Hud(props: HudProps): ReactElement {
           : '동일 초기상태 비교는 LOCAL DEMO에서 실행합니다.'}</small>
       </button>
       <div className={`rmf-preflight preflight-${preflight.state}`} data-preflight={preflight.state} role="status" aria-live="polite" aria-atomic="true">
-        <span>RMF PREFLIGHT</span><b>{preflight.label}</b>
+        <span>SIM PREFLIGHT</span><b>{preflight.label}</b>
         <small className="rmf-detail" title={preflight.detail}>{preflight.detail}</small>
       </div>
       <p className="capability-note">사람용 환경 그대로 · 보행 이동 · 계기 관찰 · 수동 밸브 조작</p>
@@ -321,7 +321,7 @@ export function Hud(props: HudProps): ReactElement {
           </article>
           <article className={`${humanoidRun?.verified ? 'complete' : currentIsHumanoid ? 'current' : ''}`}>
             <em>B · HUMANOID</em>
-            <strong>RMF 태스크 투입</strong>
+            <strong>로컬 태스크 투입</strong>
             <span><i>작업점 진입</i><b>{humanoidEntries}<small>humanoid</small></b></span>
             <span><i>사람 체류</i><b>{humanoidExposure.toFixed(1)}<small>person·sec</small></b></span>
             <span><i>격리 검증</i><b>{humanoidRun ? humanoidRun.isolationElapsed.toFixed(1) : '—'}<small>sec</small></b></span>
@@ -413,7 +413,7 @@ export function Hud(props: HudProps): ReactElement {
       <button className="inspection-button" disabled={!rmfDispatchReady} onClick={props.onInspection}>단일 설비 점검 태스크 요청</button>
       <button className="failure-button" disabled={!failureInjectable} onClick={props.onInjectFailure}>데모: 밸브 조작 실패 주입</button>
       <div className="task-list">
-        {state.humanoidTasks.length === 0 ? <p>RMF 태스크 대기 중</p> : state.humanoidTasks.map((task) => <div key={task.id}><span>{taskLabel[task.kind]}</span><b>{taskStatusLabel[task.status]}</b><small>{task.robotId ?? 'dispatcher'}</small></div>)}
+        {state.humanoidTasks.length === 0 ? <p>로컬 태스크 대기 중</p> : state.humanoidTasks.map((task) => <div key={task.id}><span>{taskLabel[task.kind]}</span><b>{taskStatusLabel[task.status]}</b><small>{task.robotId ?? 'simulator'}</small></div>)}
       </div>
     </aside>
 
@@ -423,8 +423,8 @@ export function Hud(props: HudProps): ReactElement {
       <div className="quick-actions"><button onClick={() => props.onEmergency('gasLeak')}>즉시 가스</button><button onClick={() => props.onEmergency('fire')}>즉시 화재</button><button onClick={() => props.onEmergency('medical')}>즉시 응급</button></div>
     </aside>
 
-    <aside className="panel entity-panel" aria-label="Open-RMF 플릿과 개체 추적">
-      <p className="panel-title">Open-RMF 휴머노이드 플릿</p>
+    <aside className="panel entity-panel" aria-label="로컬 휴머노이드 플릿과 개체 추적">
+      <p className="panel-title">로컬 휴머노이드 플릿</p>
       <div className="fleet-board">
         {(state.metrics?.humanoids ?? []).map((robot) => {
           const entity = state.entities.find((candidate) => candidate.id === robot.id)
@@ -441,7 +441,7 @@ export function Hud(props: HudProps): ReactElement {
             : authority === 'trace'
               ? 'TRACE'
               : authority === 'rmf'
-                ? 'RMF'
+                ? 'SIM'
                 : 'NO POSE'
           return <button
             key={robot.id}

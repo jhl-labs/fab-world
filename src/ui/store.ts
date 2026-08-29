@@ -3,7 +3,7 @@ import type { EmergencyKind, EmergencyPhase } from '../core/schema'
 import type { EntityMeta, SimMetrics } from '../core/protocol'
 import type { HumanoidTaskKind, HumanoidTaskStatus } from '../core/schema'
 import type { CameraMode } from '../render/camera/controller'
-import type { RmfConnectionState } from '../integrations/rmf/client'
+import type { LocalConnectionState } from '../integrations/localDemo'
 import type { RmfBridgeStatus } from '../core/schema'
 
 export interface LogItem { id: number; message: string; severity: 'info' | 'warning' | 'danger' }
@@ -16,9 +16,9 @@ export interface HumanoidTaskView {
 }
 interface FabUiState {
   timeScale: number; cameraMode: CameraMode; entities: EntityMeta[]; selectedId?: string; phase: EmergencyPhase; emergencyKind?: EmergencyKind; metrics?: SimMetrics; logs: LogItem[]; stats?: { fps: number; drawCalls: number; triangles: number }
-  rmfState: RmfConnectionState; rmfDetail: string; rmfBridgeStatus?: RmfBridgeStatus; humanoidTasks: HumanoidTaskView[]
+  rmfState: LocalConnectionState; rmfDetail: string; rmfBridgeStatus?: RmfBridgeStatus; humanoidTasks: HumanoidTaskView[]
   setTimeScale(value: number): void; setCameraMode(mode: CameraMode): void; setEntities(entities: EntityMeta[]): void; select(id?: string): void; setEmergency(kind: EmergencyKind | undefined, phase: EmergencyPhase): void; setMetrics(metrics: SimMetrics): void; addLog(message: string, severity?: LogItem['severity']): void; setStats(stats: { fps: number; drawCalls: number; triangles: number }): void
-  setRmfState(rmfState: RmfConnectionState, rmfDetail?: string): void; setRmfBridgeStatus(status?: RmfBridgeStatus): void; upsertHumanoidTask(task: HumanoidTaskView): void; clearHumanoidTasks(): void
+  setRmfState(rmfState: LocalConnectionState, rmfDetail?: string): void; setRmfBridgeStatus(status?: RmfBridgeStatus): void; upsertHumanoidTask(task: HumanoidTaskView): void; clearHumanoidTasks(): void
 }
 let logSequence = 1
 export const useFabStore = create<FabUiState>((set) => ({

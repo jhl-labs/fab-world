@@ -22,6 +22,16 @@ Open-RMF가 운영하는 휴머노이드의 설비 점검·현장 대응 가치�
 
 Node.js 22 이상에서 다음 명령으로 실행한다.
 
+### GitHub Pages frontend-only 브랜치
+
+`frontend-only` 브랜치는 외부 서버 없이 실행되는 정적 데모 배포용이다. 내장 레이아웃·시나리오와
+로컬 Web Worker 시뮬레이션만 포함하며, Open-RMF Bridge·RMF-Web·실시간 WebSocket dispatch는
+사용하지 않는다. 이 브랜치에 push하면 `.github/workflows/deploy-pages.yml`이 `dist`를 GitHub
+Pages에 배포한다. 저장소 Settings → Pages에서 Source를 `GitHub Actions`로 한 번 지정한다.
+
+정적 배포에서는 SharedArrayBuffer용 교차 출처 헤더를 설정할 수 없으므로 자동으로 메시지 기반
+Pose fallback을 사용한다. 기능은 유지되지만 로컬/Vite 서버보다 렌더링 성능이 낮을 수 있다.
+
 ```bash
 npm install
 npm run dev
