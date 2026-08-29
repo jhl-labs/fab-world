@@ -26,6 +26,9 @@ describe('procedural agent appearance', () => {
       (geometry.index?.count ?? geometry.getAttribute('position').count) / 3
     const personHand = scene.getObjectByName('person-leftHand') as THREE.InstancedMesh
     const personTorso = scene.getObjectByName('person-torso') as THREE.InstancedMesh
+    const personFace = scene.getObjectByName('person-visor') as THREE.InstancedMesh
+    const personMask = scene.getObjectByName('person-mask') as THREE.InstancedMesh
+    const personEyes = scene.getObjectByName('person-eyes') as THREE.InstancedMesh
     const humanoidHands: THREE.Mesh[] = []
     const coloredHumanoidShells: THREE.Mesh[] = []
     humanoidRoot?.traverse((object) => {
@@ -37,10 +40,13 @@ describe('procedural agent appearance', () => {
     expect(humanoidRoot).toBeDefined()
     expect(humanoidMeshCount).toBeGreaterThan(12)
     expect(humanoidMeshCount).toBeLessThan(30)
-    expect(personMeshes).toHaveLength(24)
+    expect(personMeshes).toHaveLength(27)
     expect(personMeshes.every((mesh) => mesh.geometry.hasAttribute('color'))).toBe(true)
     expect(triangles(personHand.geometry)).toBeGreaterThan(200)
     expect(triangles(personTorso.geometry)).toBeGreaterThan(400)
+    expect(personFace).toBeInstanceOf(THREE.InstancedMesh)
+    expect(personMask).toBeInstanceOf(THREE.InstancedMesh)
+    expect(personEyes.material).toBeInstanceOf(THREE.MeshBasicMaterial)
     expect(humanoidHands).toHaveLength(2)
     expect(humanoidHands.every((mesh) => triangles(mesh.geometry) > 500)).toBe(true)
     expect(coloredHumanoidShells).toHaveLength(8)

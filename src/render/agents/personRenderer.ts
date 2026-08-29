@@ -7,6 +7,9 @@ import type { PoseReader } from '../interpolate'
 type BodyPart =
   | 'head'
   | 'visor'
+  | 'mask'
+  | 'goggles'
+  | 'eyes'
   | 'hardhat'
   | 'hardhatBrim'
   | 'torso'
@@ -33,6 +36,9 @@ type BodyPart =
 const partOrder: BodyPart[] = [
   'head',
   'visor',
+  'mask',
+  'goggles',
+  'eyes',
   'hardhat',
   'hardhatBrim',
   'torso',
@@ -60,6 +66,7 @@ const partOrder: BodyPart[] = [
 // engineers use pale, role-tinted suits; emergency responders add the orange
 // chemical-response layer and helmet.
 const roleColor = { engineer: 0x9fc8d6, operator: 0xd4e2ea, responder: 0xd87836 } as const
+const skinTones = [0xf1c7a3, 0xd9a17b, 0xb97857, 0x86553f] as const
 
 interface GeometryLayer {
   geometry: THREE.BufferGeometry
@@ -120,28 +127,24 @@ function geometryFor(part: BodyPart): THREE.BufferGeometry {
   if (part.endsWith('Hand')) {
     const side = part.startsWith('left') ? -1 : 1
     return layeredGeometry([
-      { geometry: roundedBox(0.075, 0.105, 0.105, 0.025), position: [0, -0.015, 0] },
-      { geometry: new THREE.CylinderGeometry(0.056, 0.052, 0.04, 10), position: [0, 0.065, 0], tint: 0xc5d0d7 },
-      ...[-0.034, 0, 0.034].map((z): GeometryLayer => ({
-        geometry: new THREE.CylinderGeometry(0.012, 0.012, 0.069, 6),
-        position: [0.006, -0.09, z],
-        tint: 0xe4ecef
-      })),
+      // Cleanroom gloves read as soft mitts at crowd scale. Individual rigid
+      // fingers made personnel look like small articulated robots.
+      { geometry: new THREE.CapsuleGeometry(0.048, 0.055, 4, 9), position: [0, -0.025, 0], scale: [0.82, 1, 1.02] },
+      { geometry: new THREE.CylinderGeometry(0.054, 0.05, 0.055, 10), position: [0, 0.045, 0], tint: 0xf1f7f8 },
       {
-        geometry: new THREE.CylinderGeometry(0.015, 0.015, 0.07, 6),
-        position: [0.005, -0.035, side * 0.061],
-        rotation: [Math.PI / 2, 0, 0.18 * side],
-        tint: 0xd8e4e8
+        geometry: new THREE.CapsuleGeometry(0.017, 0.035, 3, 7),
+        position: [0.006, -0.025, side * 0.05],
+        rotation: [Math.PI / 2, 0, 0.28 * side],
+        tint: 0xe8f3f5
       }
     ])
   }
   if (part.endsWith('Boot')) {
     return layeredGeometry([
-      { geometry: roundedBox(0.24, 0.1, 0.15, 0.025), position: [0.01, 0, 0] },
-      { geometry: roundedBox(0.28, 0.028, 0.17, 0.009), position: [0.025, -0.055, 0], tint: 0x56636c },
-      { geometry: new THREE.SphereGeometry(0.075, 10, 7), position: [0.115, 0.005, 0], scale: [0.82, 0.58, 0.92], tint: 0xe8edf0 },
-      { geometry: new THREE.BoxGeometry(0.045, 0.026, 0.125), position: [0.045, 0.052, 0], tint: 0x93a5af },
-      { geometry: new THREE.BoxGeometry(0.045, 0.026, 0.125), position: [0.1, 0.052, 0], tint: 0x93a5af }
+      { geometry: roundedBox(0.235, 0.095, 0.145, 0.038), position: [0.012, 0, 0] },
+      { geometry: new THREE.SphereGeometry(0.078, 11, 8), position: [0.105, 0.005, 0], scale: [0.86, 0.6, 0.92], tint: 0xf4f7f8 },
+      { geometry: new THREE.CylinderGeometry(0.074, 0.067, 0.075, 11), position: [-0.075, 0.065, 0], tint: 0xe8f0f2 },
+      { geometry: roundedBox(0.255, 0.018, 0.155, 0.008), position: [0.02, -0.054, 0], tint: 0xb9c8ce }
     ])
   }
   if (part === 'hardhat') {
@@ -158,60 +161,68 @@ function geometryFor(part: BodyPart): THREE.BufferGeometry {
   }
   if (part === 'head') {
     return layeredGeometry([
-      { geometry: new THREE.SphereGeometry(0.14, 16, 11), scale: [0.94, 1.08, 1] },
-      { geometry: new THREE.SphereGeometry(0.105, 8, 6), position: [-0.075, 0.018, 0], scale: [0.72, 1.06, 1.12], tint: 0xe8eef1 },
-      { geometry: new THREE.TorusGeometry(0.125, 0.022, 6, 16), position: [0, -0.145, 0], rotation: [Math.PI / 2, 0, 0], tint: 0xadb9c1 },
-      { geometry: new THREE.BoxGeometry(0.018, 0.17, 0.026), position: [-0.137, 0.018, 0], tint: 0x8ea0aa }
+      { geometry: new THREE.SphereGeometry(0.145, 18, 12), scale: [0.92, 1.08, 1] },
+      { geometry: new THREE.SphereGeometry(0.12, 12, 8), position: [-0.065, 0.005, 0], scale: [0.72, 1.02, 1.08], tint: 0xf3f6f7 },
+      { geometry: new THREE.CylinderGeometry(0.13, 0.17, 0.13, 14), position: [0, -0.14, 0], tint: 0xe8eff1 },
+      { geometry: new THREE.TorusGeometry(0.105, 0.013, 6, 18), position: [0.116, 0.015, 0], rotation: [0, Math.PI / 2, 0], scale: [1, 1.12, 0.94], tint: 0xf7f9fa }
     ])
   }
   if (part === 'visor') {
+    return layeredGeometry([{ geometry: roundedBox(0.024, 0.14, 0.174, 0.028) }])
+  }
+  if (part === 'mask') {
     return layeredGeometry([
-      { geometry: roundedBox(0.045, 0.115, 0.205, 0.018) },
-      { geometry: new THREE.BoxGeometry(0.025, 0.025, 0.225), position: [0.016, 0.066, 0], tint: 0xb9c7ce },
-      { geometry: new THREE.BoxGeometry(0.042, 0.038, 0.105), position: [0.034, -0.045, 0], tint: 0x8ea2ad },
-      { geometry: new THREE.CylinderGeometry(0.014, 0.018, 0.04, 8), position: [0.033, -0.045, -0.071], rotation: [0, 0, Math.PI / 2], tint: 0xb6c4cb },
-      { geometry: new THREE.CylinderGeometry(0.014, 0.018, 0.04, 8), position: [0.033, -0.045, 0.071], rotation: [0, 0, Math.PI / 2], tint: 0xb6c4cb }
+      { geometry: roundedBox(0.026, 0.064, 0.17, 0.018) },
+      { geometry: new THREE.BoxGeometry(0.012, 0.008, 0.145), position: [0.014, 0.018, 0], tint: 0xd3e3e8 },
+      { geometry: new THREE.BoxGeometry(0.012, 0.008, 0.13), position: [0.014, -0.008, 0], tint: 0xd3e3e8 }
+    ])
+  }
+  if (part === 'goggles') {
+    return layeredGeometry([
+      { geometry: roundedBox(0.018, 0.047, 0.07, 0.015), position: [0, 0, -0.047] },
+      { geometry: roundedBox(0.018, 0.047, 0.07, 0.015), position: [0, 0, 0.047] },
+      { geometry: new THREE.BoxGeometry(0.018, 0.012, 0.035), tint: 0xe8f3f6 },
+      { geometry: new THREE.BoxGeometry(0.012, 0.012, 0.19), position: [-0.008, 0, 0], tint: 0xd7e8ed }
+    ])
+  }
+  if (part === 'eyes') {
+    return layeredGeometry([
+      { geometry: new THREE.SphereGeometry(0.012, 8, 6), position: [0, 0, -0.047], scale: [0.45, 0.72, 1] },
+      { geometry: new THREE.SphereGeometry(0.012, 8, 6), position: [0, 0, 0.047], scale: [0.45, 0.72, 1] }
     ])
   }
   if (part === 'torso') {
     return layeredGeometry([
-      { geometry: new THREE.CylinderGeometry(0.205, 0.155, 0.52, 14), scale: [0.86, 1, 1.05] },
-      { geometry: roundedBox(0.29, 0.11, 0.49, 0.04), position: [-0.005, 0.205, 0], tint: 0xf0f4f6 },
-      { geometry: new THREE.BoxGeometry(0.06, 0.22, 0.11), position: [-0.185, 0.025, 0], tint: 0x8798a3 },
-      { geometry: roundedBox(0.22, 0.13, 0.34, 0.04), position: [0, -0.31, 0], tint: 0xd5e0e5 },
-      { geometry: roundedBox(0.3, 0.075, 0.32, 0.025), position: [0, -0.245, 0], tint: 0x8798a3 },
-      { geometry: new THREE.BoxGeometry(0.026, 0.28, 0.026), position: [0.193, 0.035, 0], tint: 0x8798a3 },
-      { geometry: new THREE.BoxGeometry(0.024, 0.18, 0.022), position: [0.191, 0.055, -0.105], tint: 0xc2cdd3 },
-      { geometry: new THREE.BoxGeometry(0.024, 0.18, 0.022), position: [0.191, 0.055, 0.105], tint: 0xc2cdd3 },
-      { geometry: new THREE.BoxGeometry(0.075, 0.13, 0.1), position: [0.145, -0.135, -0.165], tint: 0xa9b7bf },
-      { geometry: new THREE.BoxGeometry(0.075, 0.13, 0.1), position: [0.145, -0.135, 0.165], tint: 0xa9b7bf }
+      { geometry: new THREE.CylinderGeometry(0.195, 0.15, 0.5, 16), scale: [0.78, 1, 1.08] },
+      { geometry: new THREE.SphereGeometry(0.2, 14, 8), position: [0, 0.195, 0], scale: [0.76, 0.34, 1.13], tint: 0xf5f8f9 },
+      { geometry: new THREE.CylinderGeometry(0.15, 0.16, 0.12, 14), position: [0, -0.28, 0], scale: [0.82, 1, 1.02], tint: 0xe9f0f2 },
+      { geometry: new THREE.BoxGeometry(0.018, 0.34, 0.018), position: [0.156, 0.015, 0], tint: 0xc4d2d7 },
+      { geometry: new THREE.TorusGeometry(0.15, 0.008, 5, 18), position: [0, -0.18, 0], rotation: [Math.PI / 2, 0, 0], scale: [0.8, 1, 1.05], tint: 0xd3dfe3 },
+      { geometry: roundedBox(0.018, 0.065, 0.095, 0.008), position: [0.157, 0.105, -0.075], tint: 0xe5ecef }
     ])
   }
   if (part.endsWith('UpperArm')) {
     return layeredGeometry([
-      { geometry: new THREE.CapsuleGeometry(0.058, 0.174, 4, 9) },
-      { geometry: roundedBox(0.105, 0.07, 0.13, 0.025), position: [0, 0.14, 0], tint: 0xe9eef1 },
-      { geometry: new THREE.CylinderGeometry(0.064, 0.064, 0.03, 10), position: [0, -0.135, 0], tint: 0xaebfc8 }
+      { geometry: new THREE.CapsuleGeometry(0.057, 0.182, 4, 10), scale: [0.94, 1, 1] },
+      { geometry: new THREE.SphereGeometry(0.061, 10, 7), position: [0, 0.137, 0], scale: [0.92, 0.5, 1], tint: 0xf5f8f9 }
     ])
   }
   if (part.endsWith('Forearm')) {
     return layeredGeometry([
-      { geometry: new THREE.CapsuleGeometry(0.052, 0.146, 4, 9), scale: [1.08, 1, 1.08] },
-      { geometry: new THREE.BoxGeometry(0.05, 0.11, 0.095), position: [0.047, -0.035, 0], tint: 0xd5e0e5 },
-      { geometry: new THREE.CylinderGeometry(0.06, 0.055, 0.035, 10), position: [0, -0.125, 0], tint: 0x9fb2bc }
+      { geometry: new THREE.CapsuleGeometry(0.049, 0.168, 4, 10), scale: [0.94, 1, 1] },
+      { geometry: new THREE.TorusGeometry(0.046, 0.006, 5, 12), position: [0, -0.13, 0], rotation: [Math.PI / 2, 0, 0], tint: 0xd5e2e5 }
     ])
   }
   if (part.endsWith('Thigh')) {
     return layeredGeometry([
-      { geometry: new THREE.CapsuleGeometry(0.078, 0.224, 4, 9), scale: [1.03, 1, 1.05] },
-      { geometry: roundedBox(0.05, 0.105, 0.105, 0.018), position: [0.068, -0.135, 0], tint: 0xa9b7bf }
+      { geometry: new THREE.CapsuleGeometry(0.075, 0.245, 4, 10), scale: [0.96, 1, 1.03] },
+      { geometry: new THREE.BoxGeometry(0.01, 0.2, 0.01), position: [0.071, -0.02, 0], tint: 0xdce6e9 }
     ])
   }
   return layeredGeometry([
-    { geometry: new THREE.CapsuleGeometry(0.068, 0.214, 4, 9), scale: [1.04, 1, 1.04] },
-    { geometry: new THREE.CylinderGeometry(0.076, 0.076, 0.032, 10), position: [0, 0.15, 0], tint: 0xafbec6 },
-    { geometry: new THREE.BoxGeometry(0.045, 0.1, 0.115), position: [0.064, 0.1, 0], tint: 0xb7c4cb },
-    { geometry: new THREE.CylinderGeometry(0.07, 0.062, 0.045, 10), position: [0, -0.15, 0], tint: 0x9bafb9 }
+    { geometry: new THREE.CapsuleGeometry(0.062, 0.226, 4, 10), scale: [0.95, 1, 1.02] },
+    { geometry: new THREE.BoxGeometry(0.01, 0.19, 0.01), position: [0.059, -0.015, 0], tint: 0xdce6e9 },
+    { geometry: new THREE.TorusGeometry(0.058, 0.007, 5, 12), position: [0, -0.151, 0], rotation: [Math.PI / 2, 0, 0], tint: 0xd2dfe3 }
   ])
 }
 
@@ -233,9 +244,14 @@ export class PersonRenderer {
   constructor(private readonly scene: THREE.Scene, entities: EntityMeta[]) {
     this.members = entities.filter((entity) => entity.kind === 'person')
     for (const part of partOrder) {
-      const material = part === 'gasDetectorScreen'
+      const material = part === 'gasDetectorScreen' || part === 'eyes'
         ? new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true })
-        : new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, metalness: 0.02, vertexColors: true })
+        : new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: part === 'goggles' ? 0.28 : 0.72,
+            metalness: 0,
+            vertexColors: true
+          })
       const mesh = new THREE.InstancedMesh(geometryFor(part), material, Math.max(1, this.members.length))
       mesh.name = `person-${part}`
       mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, this.members.length) * 3), 3)
@@ -272,11 +288,16 @@ export class PersonRenderer {
       const postureSway = fallen || treating ? 0 : gait * 0.028
       const torsoLean = (treating ? -0.18 : manualValve ? -0.1 : fast ? -0.12 : 0) + postureSway
       this.place('torso', index, pose.x, baseY, pose.z, treating ? 0.08 : 0, 0.98, 0, torsoLean, this.rootRotation, suit)
-      // The head mesh is the cleanroom hood; no exposed hair or skin is
-      // rendered. The front pane represents the mask/face shield.
+      // The hood stays continuous with the coverall while a small exposed
+      // face area, eyes, goggles, and mask make the wearer unmistakably human.
       const headLean = (treating ? -0.12 : 0) - postureSway * 0.45
-      this.place('head', index, pose.x, baseY, pose.z, treating ? 0.13 : 0, 1.48, 0, headLean, this.rootRotation, suit)
-      this.place('visor', index, pose.x, baseY, pose.z, treating ? 0.275 : 0.14, 1.49, 0, headLean, this.rootRotation, entity.role === 'responder' ? 0x20313c : 0x5d7887)
+      const headX = treating ? 0.13 : 0
+      const skin = skinTones[entity.index % skinTones.length]
+      this.place('head', index, pose.x, baseY, pose.z, headX, 1.48, 0, headLean, this.rootRotation, suit)
+      this.place('visor', index, pose.x, baseY, pose.z, headX + 0.132, 1.495, 0, headLean, this.rootRotation, skin)
+      this.place('mask', index, pose.x, baseY, pose.z, headX + 0.151, 1.458, 0, headLean, this.rootRotation, 0xf1f7f8)
+      this.place('goggles', index, pose.x, baseY, pose.z, headX + 0.154, 1.535, 0, headLean, this.rootRotation, 0xaed7e4)
+      this.place('eyes', index, pose.x, baseY, pose.z, headX + 0.165, 1.535, 0, headLean, this.rootRotation, 0x2e211d)
       const helmetColor = entity.role === 'responder' ? 0xf4f7f9 : 0xf0b833
       this.scale.setScalar(entity.role === 'operator' ? 0 : 1)
       this.place('hardhat', index, pose.x, baseY, pose.z, treating ? 0.145 : 0, 1.54, 0, treating ? -0.12 : 0, this.rootRotation, helmetColor)
@@ -284,13 +305,16 @@ export class PersonRenderer {
       this.scale.set(1, 1, 1)
 
       const gesture = THREE.MathUtils.smoothstep(pose.auxA, 0, 1)
-      let leftUpperArm = gait * -0.62
-      let leftForearm = leftUpperArm - 0.12 - Math.max(0, -gait) * 0.24
-      let rightUpperArm = gait * 0.62
-      let rightForearm = rightUpperArm - 0.12 - Math.max(0, gait) * 0.24
-      let leftThigh = gait * 0.62
+      const idleVariation = pace === 0 && !fallen && !treating
+        ? Math.sin(entity.index * 1.618) * 0.035
+        : 0
+      let leftUpperArm = gait * -0.62 + idleVariation
+      let leftForearm = leftUpperArm - 0.16 - Math.max(0, -gait) * 0.24
+      let rightUpperArm = gait * 0.62 - idleVariation * 0.65
+      let rightForearm = rightUpperArm - 0.11 - Math.max(0, gait) * 0.24
+      let leftThigh = gait * 0.62 + idleVariation * 0.22
       let leftShin = -Math.max(0, gait) * 0.48
-      let rightThigh = gait * -0.62
+      let rightThigh = gait * -0.62 - idleVariation * 0.22
       let rightShin = -Math.max(0, -gait) * 0.48
       if (acknowledging) {
         rightUpperArm = THREE.MathUtils.lerp(0.1, 1.22, Math.max(0.35, gesture))
@@ -348,11 +372,11 @@ export class PersonRenderer {
       }
 
       const leftHand = this.placeTwoSegmentLimb(
-        index, pose.x, baseY, pose.z, -0.27, 1.34, 0.29, 0.26,
+        index, pose.x, baseY, pose.z, -0.245, 1.34, 0.29, 0.26,
         leftUpperArm, leftForearm, 'leftUpperArm', 'leftForearm', this.rootRotation, suit
       )
       const rightHand = this.placeTwoSegmentLimb(
-        index, pose.x, baseY, pose.z, 0.27, 1.34, 0.29, 0.26,
+        index, pose.x, baseY, pose.z, 0.245, 1.34, 0.29, 0.26,
         rightUpperArm, rightForearm, 'rightUpperArm', 'rightForearm', this.rootRotation, suit
       )
       const gloveColor = entity.role === 'responder' ? 0x263746 : 0xb8e4ec
