@@ -326,6 +326,19 @@ describe('SimWorld', () => {
       (normalPose[entity.index * POSE_STRIDE + PoseSlot.FLAGS]! & PoseFlags.EVACUATION_GUIDE) === 0
     )).toBe(true)
   })
+  it('keeps evacuation batons off gas-response humanoids', () => {
+    const world = new SimWorld(layout, 977)
+    world.triggerEmergency('gasLeak')
+    world.setPhase('alarm')
+    world.tick(1 / 60)
+    const pose = new Float32Array(world.poseSnapshot().buffer)
+    const humanoids = world.entities.filter((entity) => entity.kind === 'humanoid')
+
+    expect(humanoids.some((entity) => entity.taskId)).toBe(true)
+    expect(humanoids.every((entity) =>
+      (pose[entity.index * POSE_STRIDE + PoseSlot.FLAGS]! & PoseFlags.EVACUATION_GUIDE) === 0
+    )).toBe(true)
+  })
   it('advances a crowd through a shared graph waypoint without violating personal space', () => {
     const world = new SimWorld(layout, 971)
     const graph = world.layout.walkGraph
@@ -1197,6 +1210,24 @@ describe('SimWorld', () => {
     expect(task?.status).toBe('completed')
     expect(world.completedHumanoidTasks).toBe(1)
     expect(world.events.some((event) => event.type === 'interaction' && event.taskId === 'inspection-test')).toBe(true)
+  })
+  it('completes gas-continuity reporting instead of parking the inspector indefinitely', () => {
+    const world = new SimWorld(layout, 124)
+    const robot = world.entities.find((entity) => entity.kind === 'humanoid')!
+    world.triggerEmergency('gasLeak')
+    world.dispatchHumanoidTask({
+      id: 'gas-continuity-inspection-test',
+      kind: 'inspection_round',
+      target: [robot.x, robot.z],
+      requestedBy: 'operator',
+      priority: 50
+    })
+
+    for (let tick = 0; tick < 1_200; tick++) world.tick(1 / 60)
+
+    const task = world.humanoidTasks.find((candidate) => candidate.id === 'gas-continuity-inspection-test')
+    expect(task?.status).toBe('completed')
+    expect(robot.taskId).not.toBe(task?.id)
   })
   it('waits for a nearby operator to physically clear the humanoid work zone', () => {
     const world = new SimWorld(layout, 325)

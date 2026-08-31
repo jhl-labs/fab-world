@@ -248,7 +248,6 @@ export class SimWorld {
     updateEquipment(this, dt)
     updateMissions(this)
     updateHumanoids(this)
-    this.updateGasContinuitySweep()
     updatePeople(this)
     this.updateShowcase()
     updateTraffic(this)
@@ -572,6 +571,10 @@ export class SimWorld {
       if (!robot) return
       task.robotId = robot.id; task.status = 'assigned'; task.stageStartedAt = this.simTime
       robot.taskId = task.id; robot.activity = 'walking'; robot.goalX = task.targetX; robot.goalZ = task.targetZ
+      // A robot performing isolation or continuity inspection is not an
+      // evacuation marshal. Leaving this role set made a stationary reporting
+      // robot wave a baton indefinitely instead of completing its work cycle.
+      robot.evacuationGuiding = false
       robot.emergency = task.kind === 'gas_isolation' || task.kind === 'medical_support' || continuityInspector
       if (continuityInspector) robot.maxSpeed = Math.max(robot.maxSpeed, 1.75)
       if (task.kind === 'gas_isolation') robot.maxSpeed = Math.max(robot.maxSpeed, 1.75)
@@ -1029,7 +1032,11 @@ export class SimWorld {
         // This is an explicit simulated response role, not a generic
         // "emergency-colored robot". The renderer uses it to put a lit baton
         // in the robot's hand while it is available to guide evacuation.
-        entity.evacuationGuiding = kind === 'gasLeak' || kind === 'fire'
+        // Fire marshaling benefits from a visible baton. Gas-response
+        // humanoids instead perform source isolation while remote vehicles
+        // cover equipment continuity, so a baton would communicate the wrong
+        // role and can visually mask a stalled task.
+        entity.evacuationGuiding = kind === 'fire'
       })
       if (kind === 'gasLeak') {
         this.overrideBehavior('type:agv', 'yield')
@@ -1067,31 +1074,6 @@ export class SimWorld {
           ...(this.riskComparison?.mode === 'humanoid' ? { targetId: this.riskComparison.targetId } : {}),
           requestedBy: this.showcaseInspectionTaskId ? 'showcase' : 'operator',
           priority: 100
-        })
-      }
-      // While H2 isolates the source, H1 independently scans a healthy bay
-      // outside the gas boundary. This makes the response visibly parallel:
-      // containment, remote vehicle checks, and equipment continuity happen
-      // at the same time rather than waiting for the evacuation counter.
-      if (kind === 'gasLeak' && !this.riskComparison) {
-        const safeEquipment = this.layout.layout.bays
-          .flatMap((bay) => bay.equipment)
-          .filter((equipment) => !this.emergency.hazard || Math.hypot(
-            equipment.position[0] - this.emergency.hazard.sourceX,
-            equipment.position[2] - this.emergency.hazard.sourceZ
-          ) >= this.emergency.hazard.maxRadius + 8)
-          .sort((left, right) => {
-            const inspector = this.entities.find((entity) => entity.kind === 'humanoid' && entity.id.endsWith('001'))
-            const leftDistance = inspector ? Math.hypot(left.position[0] - inspector.x, left.position[2] - inspector.z) : 0
-            const rightDistance = inspector ? Math.hypot(right.position[0] - inspector.x, right.position[2] - inspector.z) : 0
-            return leftDistance - rightDistance || left.id.localeCompare(right.id)
-          })[0]
-        if (safeEquipment) this.dispatchHumanoidTask({
-          id: `gas-continuity-inspection-${this.taskSequence++}`,
-          kind: 'inspection_round',
-          targetId: safeEquipment.id,
-          requestedBy: 'operator',
-          priority: 85
         })
       }
       if (kind === 'medical' && !this.humanoidTasks.some((task) => task.kind === 'medical_support' && !['completed', 'failed', 'cancelled'].includes(task.status))) {
@@ -1502,46 +1484,6 @@ export class SimWorld {
   }
   log(message: string): void { this.events.push({ type: 'log', message }) }
   drainEvents(): SimEvent[] { return this.events.splice(0) }
-  private updateGasContinuitySweep(): void {
-    if (this.emergency.kind !== 'gasLeak' || this.emergency.phase === 'normal' || this.emergency.phase === 'allClear' || this.riskComparison) return
-    const isolation = this.humanoidTasks.find((task) => task.kind === 'gas_isolation')
-    if (!isolation?.gasIsolationVerified) return
-    const firstPass = this.humanoidTasks.find((task) => task.id.startsWith('gas-continuity-inspection-'))
-    if (!firstPass || firstPass.status !== 'completed') return
-    if (this.humanoidTasks.some((task) => task.id.startsWith('gas-continuity-verification-'))) return
-    const inspector = this.entities.find((entity) => entity.kind === 'humanoid' && entity.id === firstPass.robotId)
-    const target = this.layout.layout.bays
-      .flatMap((bay) => bay.equipment)
-      .filter((equipment) =>
-        equipment.id !== firstPass.targetId &&
-        (!this.emergency.hazard || Math.hypot(
-          equipment.position[0] - this.emergency.hazard.sourceX,
-          equipment.position[2] - this.emergency.hazard.sourceZ
-        ) >= this.emergency.hazard.maxRadius + 8)
-      )
-      .sort((left, right) => {
-        const leftSeparation = Math.hypot(left.position[0] - firstPass.targetX, left.position[2] - firstPass.targetZ)
-        const rightSeparation = Math.hypot(right.position[0] - firstPass.targetX, right.position[2] - firstPass.targetZ)
-        const leftDistance = inspector ? Math.hypot(left.position[0] - inspector.x, left.position[2] - inspector.z) : 0
-        const rightDistance = inspector ? Math.hypot(right.position[0] - inspector.x, right.position[2] - inspector.z) : 0
-        return Math.abs(leftSeparation - 42) - Math.abs(rightSeparation - 42) ||
-          leftDistance - rightDistance ||
-          left.id.localeCompare(right.id)
-      })[0]
-    if (!target) return
-    this.dispatchHumanoidTask({
-      id: `gas-continuity-verification-${this.taskSequence++}`,
-      kind: 'inspection_round',
-      targetId: target.id,
-      requestedBy: 'operator',
-      priority: 84
-    })
-    this.events.push({
-      type: 'hudMessage',
-      message: `${inspector?.name ?? '휴머노이드'}에 외곽 설비 2차 검증을 병렬 배정했습니다.`,
-      data: { severity: 'info' }
-    })
-  }
   private updateRemoteGasInspections(): void {
     if (this.emergency.kind !== 'gasLeak' || this.emergency.phase === 'normal') return
     for (const entity of this.entities) {
@@ -2018,7 +1960,7 @@ export class SimWorld {
         (entity.taskId ? PoseFlags.HAS_TASK : 0) |
         (entity.activity === 'safeStop' || entity.status === 'error' ? PoseFlags.SAFE_STOP : 0) |
         (measuredHandPose ? PoseFlags.MEASURED_HAND_POSE : 0) |
-        (entity.evacuationGuiding && entity.activity !== 'manipulating' && entity.status !== 'error' ? PoseFlags.EVACUATION_GUIDE : 0) |
+        (entity.evacuationGuiding && !entity.taskId && entity.activity !== 'manipulating' && entity.status !== 'error' ? PoseFlags.EVACUATION_GUIDE : 0) |
         (entity.mission === 'medical-transport' ? PoseFlags.MEDICAL_TRANSPORT : 0)
       this.pose[slot + PoseSlot.AUX_A] = entity.auxA; this.pose[slot + PoseSlot.AUX_B] = entity.auxB
       this.pose[slot + PoseSlot.LEFT_HAND_X] = entity.measuredLeftHandPosition?.[0] ?? 0

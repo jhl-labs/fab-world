@@ -238,20 +238,6 @@ function updateTask(world: SimWorld, task: HumanoidTaskRuntime): void {
     }
     case 'reporting':
       robot.speed = 0; robot.auxA = Math.min(1, elapsed / 2.5)
-      // A gas-continuity inspection remains on station after its first report.
-      // It keeps monitoring the exterior equipment while people finish their
-      // evacuation, instead of walking home and leaving the response story
-      // with a static valve shot.
-      if (
-        task.kind === 'inspection_round' &&
-        task.id.startsWith('gas-continuity-') &&
-        world.emergency.kind === 'gasLeak' &&
-        world.emergency.phase !== 'allClear' &&
-        world.emergency.phase !== 'normal'
-      ) {
-        robot.activity = 'reporting'
-        return
-      }
       if (elapsed >= 2.5) {
         robot.goalX = robot.homeX; robot.goalZ = robot.homeZ
         setStatus(world, task, 'returning')
