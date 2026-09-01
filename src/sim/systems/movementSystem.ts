@@ -77,8 +77,11 @@ function chooseTarget(world: SimWorld, entity: SimEntity, blockedRobot?: SimEnti
   }
   const to = nearestAvailableNode(graph, x, z, blockedNodes)
   const authorizedResponse = entity.behavior === 'respond' || (entity.kind === 'humanoid' && entity.emergency)
+  const gasIsolationResponse = entity.kind === 'humanoid' && entity.taskId !== undefined && world.humanoidTasks.some((task) =>
+    task.id === entity.taskId && task.kind === 'gas_isolation' && !['completed', 'failed', 'cancelled'].includes(task.status)
+  )
   const trafficPenalties = bodyRadius > 0
-    ? dynamicTrafficPenalties(world, graph, bodyRadius)
+    ? dynamicTrafficPenalties(world, graph, bodyRadius, gasIsolationResponse)
     : new Map<number, number>()
   const hazards = authorizedResponse ? new Map<string, 'safe' | 'warning' | 'danger'>() : world.hazardLevels
   let avoidedStationaryBodies = true
@@ -165,10 +168,11 @@ function navigationBlocksForRobots(
 function dynamicTrafficPenalties(
   world: SimWorld,
   graph: GroundGraph,
-  bodyRadius: number
+  bodyRadius: number,
+  ignoreYieldingVehicles = false
 ): ReadonlyMap<number, number> {
-  const stationaryRobots = world.entities.filter(isStationaryGroundRobot)
-  const signature = stationaryRobots
+  const allStationaryRobots = world.entities.filter(isStationaryGroundRobot)
+  const signature = allStationaryRobots
     .map((robot) => `${robot.id}:${robot.x.toFixed(2)}:${robot.z.toFixed(2)}`)
     .join('|')
   let cache = trafficPenaltyCache.get(world)
@@ -177,9 +181,17 @@ function dynamicTrafficPenalties(
     trafficPenaltyCache.set(world, cache)
   }
   const graphName = graph === world.layout.walkGraph ? 'walk' : graph === world.layout.roadGraph ? 'road' : 'rail'
-  const key = `${graphName}:${bodyRadius.toFixed(2)}`
+  const key = `${graphName}:${bodyRadius.toFixed(2)}:${ignoreYieldingVehicles ? 'response' : 'normal'}`
   const existing = cache.byGraphAndRadius.get(key)
   if (existing) return existing
+  // Safe-parking vehicles are transient obstacles during gas response. Keep
+  // them in local steering/collision checks without turning the entire parked
+  // fleet into a facility-wide detour for the isolation robot.
+  const stationaryRobots = ignoreYieldingVehicles
+    ? allStationaryRobots.filter((robot) =>
+        !((robot.kind === 'agv' || robot.kind === 'igv') && robot.behavior === 'yield')
+      )
+    : allStationaryRobots
   const penalties = new Map<number, number>()
   for (const robot of stationaryRobots) {
     const influence = groundBodyRadius(robot) + bodyRadius + 2.1

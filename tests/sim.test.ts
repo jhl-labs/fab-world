@@ -136,6 +136,28 @@ describe('SimWorld', () => {
     expect(responder.trafficSpeedLimit).toBeGreaterThan(0)
     expect(vehicle.trafficSpeedLimit).toBe(0)
   })
+  it('keeps the gas-isolation route direct while AGVs clear to safe parking', () => {
+    const world = new SimWorld(layout, 20260729)
+    world.triggerEmergency('gasLeak')
+    for (let tick = 0; tick < 10 * 60; tick++) world.tick(1 / 60)
+    const task = world.humanoidTasks.find((candidate) => candidate.kind === 'gas_isolation')!
+    const robot = world.entities.find((entity) => entity.id === task.robotId)!
+    const graph = world.layout.walkGraph
+    const route = robot.route.slice(robot.routeCursor)
+    const direct = graph.findPath(
+      graph.nearest(robot.x, robot.z),
+      graph.nearest(task.targetX, task.targetZ),
+      new Map()
+    )
+    const distance = (path: number[]): number => path.slice(1).reduce((total, nodeIndex, index) => {
+      const from = graph.nodes[path[index]!]!
+      const to = graph.nodes[nodeIndex]!
+      return total + Math.hypot(to.x - from.x, to.z - from.z)
+    }, 0)
+
+    expect(task.status).toBe('navigating')
+    expect(distance(route)).toBeLessThan(distance(direct) * 1.6)
+  })
   it('keeps operator-dispatched gas robots behind evacuees in a shared egress lane', () => {
     const world = new SimWorld(layout, 971)
     world.triggerEmergency('gasLeak')
