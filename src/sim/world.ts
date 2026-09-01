@@ -51,6 +51,7 @@ const ACTION_TELEMETRY_PHASE_ORDER = {
   verified: 4
 } as const
 const MUSTER_SAFE_RADIUS = 5
+const GAS_VALVE_AGV_CLEAR_RADIUS = 10
 
 export class SimWorld {
   readonly layout: DerivedLayout
@@ -1889,17 +1890,35 @@ export class SimWorld {
       .filter(({ node }) =>
         (!hazard || Math.hypot(node.x - hazard.sourceX, node.z - hazard.sourceZ) > hazard.maxRadius * 1.8 + 5) &&
         // The valve approach is an emergency work area, not a parking bay.
-        // Keeping the whole ground-vehicle body outside this visual/service
-        // perimeter leaves the humanoid and its manipulation pose readable.
+        // Keep ground-vehicle parking far enough away that the full valve
+        // operation remains unobstructed in the simulation camera.
         gasValveWorkZones.every(([x, z]) =>
-          Math.hypot(node.x - x, node.z - z) >= GAS_WORK_ZONE_RADIUS + groundBodyRadius(entity) + 1.8
+          Math.hypot(node.x - x, node.z - z) >= GAS_VALVE_AGV_CLEAR_RADIUS
         ) &&
         reserved.every(([x, z]) => Math.hypot(node.x - x, node.z - z) >= (entity.kind === 'oht' ? 4 : 2.2)) &&
         humanoidStations.every(([x, z]) => Math.hypot(node.x - x, node.z - z) >= 3)
       )
       .sort((left, right) => left.distance - right.distance || left.node.id.localeCompare(right.node.id))
       .find(({ index }) => graph.findPath(from, index, this.hazardLevels).length > 0)?.node
-    if (target) { entity.goalX = target.x; entity.goalZ = target.z }
+    if (target) {
+      entity.goalX = target.x
+      entity.goalZ = target.z
+      const agvInsideValveWorkZone = entity.kind === 'agv' && gasValveWorkZones.some(([x, z]) =>
+        Math.hypot(entity.x - x, entity.z - z) < GAS_VALVE_AGV_CLEAR_RADIUS
+      )
+      if (agvInsideValveWorkZone) {
+        // Gas response starts with an already-cleared valve apron. Do not
+        // spend the scenario watching a parked AGV negotiate dense traffic.
+        entity.x = target.x
+        entity.z = target.z
+        entity.speed = 0
+        entity.status = 'waiting'
+        entity.route = []
+        entity.routeCursor = 0
+        entity.targetX = Number.NaN
+        entity.targetZ = Number.NaN
+      }
+    }
   }
   private withdrawRespondersFromControlledHazard(): void {
     const hazard = this.emergency.hazard
