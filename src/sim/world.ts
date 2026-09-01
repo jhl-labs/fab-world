@@ -1031,16 +1031,6 @@ export class SimWorld {
     if (phase === 'alarm') {
       const kind = this.emergency.kind
       this.overrideBehavior('type:person', kind === 'medical' ? 'yield' : 'evacuate')
-      this.entities.filter((entity) => entity.kind === 'humanoid').forEach((entity) => {
-        // This is an explicit simulated response role, not a generic
-        // "emergency-colored robot". The renderer uses it to put a lit baton
-        // in the robot's hand while it is available to guide evacuation.
-        // Fire marshaling benefits from a visible baton. Gas-response
-        // humanoids instead perform source isolation while remote vehicles
-        // cover equipment continuity, so a baton would communicate the wrong
-        // role and can visually mask a stalled task.
-        entity.evacuationGuiding = kind === 'fire'
-      })
       if (kind === 'gasLeak') {
         this.overrideBehavior('type:agv', 'yield')
         this.overrideBehavior('type:oht', 'yield')
@@ -1089,6 +1079,10 @@ export class SimWorld {
           priority: 95
         })
       }
+      // Reserve the specialist first, then place only the remaining robot in
+      // the visible evacuation-guide role.
+      this.assignQueuedHumanoidTasks()
+      this.stageEvacuationGuides(kind)
     }
     if (phase === 'allClear') this.entities.forEach((entity) => {
       const holdAtMuster = entity.kind === 'person' && this.emergency.kind !== 'medical'
@@ -1918,6 +1912,82 @@ export class SimWorld {
         entity.targetX = Number.NaN
         entity.targetZ = Number.NaN
       }
+    }
+  }
+  private stageEvacuationGuides(kind: EmergencyKind | undefined): void {
+    if (!kind) return
+    const robots = this.entities.filter((entity) => entity.kind === 'humanoid' && !entity.rmfControlled && !entity.taskId)
+    const graph = this.layout.walkGraph
+    const musterExits = [...this.layout.layout.emergency.exits]
+      .sort((left, right) => {
+        const musterDistance = (exit: typeof left): number => Math.min(...this.layout.layout.emergency.musterPoints.map((muster) =>
+          Math.hypot(exit.position[0] - muster.position[0], exit.position[2] - muster.position[2])
+        ))
+        return musterDistance(left) - musterDistance(right) || left.id.localeCompare(right.id)
+      })
+      .slice(0, 2)
+    const hazard = this.emergency.hazard
+    const vehicleClearances = this.entities
+      .filter((entity) => entity.kind === 'agv' || entity.kind === 'igv')
+      .flatMap((vehicle) => [
+        [vehicle.x, vehicle.z] as const,
+        ...(vehicle.behavior === 'yield' && Number.isFinite(vehicle.goalX) && Number.isFinite(vehicle.goalZ)
+          ? [[vehicle.goalX, vehicle.goalZ] as const]
+          : [])
+      ])
+    const guideTargets: Array<readonly [number, number]> = []
+    for (const [index, robot] of robots.entries()) {
+      let guideX: number
+      let guideZ: number
+      let guideExit: FabLayout['emergency']['exits'][number] | undefined
+      if (kind === 'medical' && hazard) {
+        const exit = [...this.layout.layout.emergency.exits]
+          .sort((left, right) =>
+            Math.hypot(left.position[0] - hazard.sourceX, left.position[2] - hazard.sourceZ) -
+              Math.hypot(right.position[0] - hazard.sourceX, right.position[2] - hazard.sourceZ)
+          )[0]!
+        const dx = exit.position[0] - hazard.sourceX
+        const dz = exit.position[2] - hazard.sourceZ
+        const length = Math.max(0.1, Math.hypot(dx, dz))
+        const side = index % 2 === 0 ? -2.2 : 2.2
+        guideX = hazard.sourceX + dx / length * 5 - dz / length * side
+        guideZ = hazard.sourceZ + dz / length * 5 + dx / length * side
+      } else {
+        guideExit = musterExits[index % Math.max(1, musterExits.length)] ?? this.layout.layout.emergency.exits[0]!
+        // Stand beside the doorway instead of occupying the centreline that
+        // evacuees use. The wide egress shot still keeps the baton in frame.
+        guideX = guideExit.position[0] + (index % 2 === 0 ? -7.5 : 15)
+        guideZ = guideExit.position[2]
+      }
+      const node = graph.nodes
+        .map((candidate) => ({ candidate, distance: Math.hypot(candidate.x - guideX, candidate.z - guideZ) }))
+        .filter(({ candidate }) =>
+          vehicleClearances.every(([x, z]) => Math.hypot(candidate.x - x, candidate.z - z) >= 3) &&
+          guideTargets.every(([x, z]) => Math.hypot(candidate.x - x, candidate.z - z) >= 3) &&
+          (!guideExit || (() => {
+            const doorwayDistance = Math.hypot(candidate.x - guideExit.position[0], candidate.z - guideExit.position[2])
+            return doorwayDistance >= 5 && doorwayDistance <= 18
+          })())
+        )
+        .sort((left, right) => left.distance - right.distance || left.candidate.id.localeCompare(right.candidate.id))[0]?.candidate ??
+        graph.nodes[graph.nearest(guideX, guideZ)]!
+      guideTargets.push([node.x, node.z])
+      robot.evacuationGuiding = true
+      robot.emergency = true
+      robot.behavior = 'yield'
+      robot.activity = 'walking'
+      robot.maxSpeed = Math.max(robot.maxSpeed, 1.75)
+      robot.goalX = node.x
+      robot.goalZ = node.z
+      robot.x = node.x
+      robot.z = node.z
+      robot.speed = 0
+      robot.status = 'waiting'
+      robot.route = []
+      robot.routeCursor = 0
+      robot.targetX = Number.NaN
+      robot.targetZ = Number.NaN
+      robot.targetDelay = 0
     }
   }
   private withdrawRespondersFromControlledHazard(): void {

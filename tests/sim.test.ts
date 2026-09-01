@@ -351,15 +351,26 @@ describe('SimWorld', () => {
       groundBodyRadius(robots[0]!) + groundBodyRadius(robots[1]!)
     )
   })
-  it('marks humanoids as baton-equipped evacuation guides only during an active evacuation incident', () => {
+  it.each(['gasLeak', 'fire', 'medical'] as const)('shows a dedicated baton-equipped guide during %s response', (kind) => {
     const world = new SimWorld(layout, 975)
-    world.triggerEmergency('fire')
+    world.triggerEmergency(kind)
     world.setPhase('alarm')
     world.tick(1 / 60)
     const activePose = new Float32Array(world.poseSnapshot().buffer)
     const humanoids = world.entities.filter((entity) => entity.kind === 'humanoid')
-    expect(humanoids.every((entity) =>
+    const guides = humanoids.filter((entity) =>
       (activePose[entity.index * POSE_STRIDE + PoseSlot.FLAGS]! & PoseFlags.EVACUATION_GUIDE) !== 0
+    )
+    expect(guides.length).toBeGreaterThanOrEqual(1)
+    expect(guides.every((entity) => !entity.taskId && entity.activity === 'walking')).toBe(true)
+    if (kind !== 'medical') expect(guides.every((entity) => {
+      const doorwayDistance = Math.min(...layout.emergency.exits.map((exit) =>
+        Math.hypot(entity.x - exit.position[0], entity.z - exit.position[2])
+      ))
+      return doorwayDistance >= 5 && doorwayDistance <= 18
+    })).toBe(true)
+    expect(humanoids.filter((entity) => entity.taskId).every((entity) =>
+      (activePose[entity.index * POSE_STRIDE + PoseSlot.FLAGS]! & PoseFlags.EVACUATION_GUIDE) === 0
     )).toBe(true)
 
     world.finishEmergency()
@@ -367,19 +378,6 @@ describe('SimWorld', () => {
     const normalPose = new Float32Array(world.poseSnapshot().buffer)
     expect(humanoids.every((entity) =>
       (normalPose[entity.index * POSE_STRIDE + PoseSlot.FLAGS]! & PoseFlags.EVACUATION_GUIDE) === 0
-    )).toBe(true)
-  })
-  it('keeps evacuation batons off gas-response humanoids', () => {
-    const world = new SimWorld(layout, 977)
-    world.triggerEmergency('gasLeak')
-    world.setPhase('alarm')
-    world.tick(1 / 60)
-    const pose = new Float32Array(world.poseSnapshot().buffer)
-    const humanoids = world.entities.filter((entity) => entity.kind === 'humanoid')
-
-    expect(humanoids.some((entity) => entity.taskId)).toBe(true)
-    expect(humanoids.every((entity) =>
-      (pose[entity.index * POSE_STRIDE + PoseSlot.FLAGS]! & PoseFlags.EVACUATION_GUIDE) === 0
     )).toBe(true)
   })
   it('advances a crowd through a shared graph waypoint without violating personal space', () => {
@@ -995,7 +993,7 @@ describe('SimWorld', () => {
     expect(world.emergency.phase).toBe('response')
     expect(world.events.some((event) => event.message?.includes('현장 지휘 확인 필요'))).toBe(true)
   })
-  it('moves local humanoids outside the final fire perimeter before safe-stop', () => {
+  it('places local humanoids outside the final fire perimeter for active evacuation guidance', () => {
     const world = new SimWorld(layout, 74)
     world.triggerEmergency('fire')
     const hazard = world.emergency.hazard!
@@ -1004,13 +1002,14 @@ describe('SimWorld', () => {
     robot.z = hazard.sourceZ
     world.setPhase('alarm')
     expect(robot.behavior).toBe('yield')
-    expect(robot.activity).toBe('yielding')
+    expect(robot.activity).toBe('walking')
+    expect(robot.evacuationGuiding).toBe(true)
     expect(Math.hypot(robot.goalX - hazard.sourceX, robot.goalZ - hazard.sourceZ)).toBeGreaterThan(hazard.maxRadius * 1.8 + 5)
     robot.x = robot.goalX
     robot.z = robot.goalZ
     world.tick(1 / 60)
-    expect(robot.activity).toBe('safeStop')
-    expect(world.events.some((event) => event.type === 'interaction' && event.robotId === robot.id && event.message?.includes('안전 지점'))).toBe(true)
+    expect(robot.activity).toBe('walking')
+    expect(robot.evacuationGuiding).toBe(true)
   })
   it('holds only fire-adjacent equipment, blocks new intake, and resumes the exact process stage', () => {
     const world = new SimWorld(layout, 73)
