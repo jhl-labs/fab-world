@@ -577,7 +577,9 @@ export class SimWorld {
       robot.evacuationGuiding = false
       robot.emergency = task.kind === 'gas_isolation' || task.kind === 'medical_support' || continuityInspector
       if (continuityInspector) robot.maxSpeed = Math.max(robot.maxSpeed, 1.75)
-      if (task.kind === 'gas_isolation') robot.maxSpeed = Math.max(robot.maxSpeed, 1.75)
+      // Isolation is a time-critical emergency response, so use the
+      // humanoid's fast response gait for the long valve approach.
+      if (task.kind === 'gas_isolation') robot.maxSpeed = Math.max(robot.maxSpeed, 2.3)
       if (task.kind === 'medical_support') robot.maxSpeed = Math.max(robot.maxSpeed, 2.2)
       robot.auxB = task.kind === 'medical_support' ? 1 : task.kind === 'gas_isolation' ? -1 : 0
       robot.targetX = Number.NaN; robot.targetZ = Number.NaN; robot.route = []; robot.routeCursor = 0
@@ -1858,6 +1860,11 @@ export class SimWorld {
   private assignSafeParking(entity: SimEntity): void {
     const graph = entity.kind === 'oht' ? this.layout.railGraph : entity.kind === 'humanoid' || entity.kind === 'person' ? this.layout.walkGraph : this.layout.roadGraph
     const hazard = this.emergency.hazard
+    const gasValveWorkZones = this.emergency.kind === 'gasLeak' && entity.kind !== 'oht'
+      ? this.layout.layout.emergency.safetyDevices
+          .filter((device) => device.kind === 'gas-isolation-valve')
+          .map((device) => [device.position[0], device.position[2]] as const)
+      : []
     const from = graph.nearest(entity.x, entity.z)
     const reserved = this.entities
       .filter((other) =>
@@ -1881,6 +1888,12 @@ export class SimWorld {
       .map((node, index) => ({ node, index, distance: Math.hypot(node.x - entity.x, node.z - entity.z) }))
       .filter(({ node }) =>
         (!hazard || Math.hypot(node.x - hazard.sourceX, node.z - hazard.sourceZ) > hazard.maxRadius * 1.8 + 5) &&
+        // The valve approach is an emergency work area, not a parking bay.
+        // Keeping the whole ground-vehicle body outside this visual/service
+        // perimeter leaves the humanoid and its manipulation pose readable.
+        gasValveWorkZones.every(([x, z]) =>
+          Math.hypot(node.x - x, node.z - z) >= GAS_WORK_ZONE_RADIUS + groundBodyRadius(entity) + 1.8
+        ) &&
         reserved.every(([x, z]) => Math.hypot(node.x - x, node.z - z) >= (entity.kind === 'oht' ? 4 : 2.2)) &&
         humanoidStations.every(([x, z]) => Math.hypot(node.x - x, node.z - z) >= 3)
       )

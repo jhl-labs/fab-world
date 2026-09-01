@@ -2,6 +2,15 @@ import type { SimWorld } from '../world'
 import type { SimEntity } from '../types'
 import { isStationaryGroundRobot } from './movementSystem'
 
+function isGasIsolationResponder(world: SimWorld, entity: SimEntity): boolean {
+  if (entity.kind !== 'humanoid' || !entity.emergency || entity.auxB >= -0.5 || !entity.taskId) return false
+  return world.humanoidTasks.some((task) =>
+    task.id === entity.taskId &&
+    task.kind === 'gas_isolation' &&
+    !['completed', 'failed', 'cancelled'].includes(task.status)
+  )
+}
+
 function rightOfWay(world: SimWorld, entity: SimEntity): number {
   // Responders keep right-of-way while clearing the treatment perimeter after
   // loading; otherwise a stretcher vehicle and a yielding responder can
@@ -23,7 +32,7 @@ function rightOfWay(world: SimWorld, entity: SimEntity): number {
   // Gas isolation is urgent, but the robot must not claim a shared egress
   // lane from people who are still evacuating. Once the aisle is clear its
   // emergency travel speed remains available for the long valve approach.
-  if (entity.kind === 'humanoid' && entity.emergency && entity.auxB < -0.5) {
+  if (isGasIsolationResponder(world, entity)) {
     const task = entity.taskId
       ? world.humanoidTasks.find((candidate) => candidate.id === entity.taskId)
       : undefined
@@ -55,6 +64,7 @@ export function updateTraffic(world: SimWorld): void {
     if (entity.kind === 'arm') continue
     let limit = entity.maxSpeed
     const entityPriority = priorityByEntity.get(entity)!
+    const gasIsolationResponder = isGasIsolationResponder(world, entity)
     const cellX = Math.floor(entity.x / cellSize)
     const cellZ = Math.floor(entity.z / cellSize)
     const range = entity.kind === 'person' ? 1 : 3
@@ -102,9 +112,15 @@ export function updateTraffic(world: SimWorld): void {
         // stride for the lateral steering solver instead of entering the
         // generic robot/robot zero-speed deadlock several metres away.
         const bodyClearance = 0.28 + (other.kind === 'igv' ? 0.96 : other.kind === 'agv' ? 0.64 : 0.28)
+        const yieldingVehicleClearingResponseLane =
+          gasIsolationResponder &&
+          (other.kind === 'agv' || other.kind === 'igv') &&
+          other.behavior === 'yield'
         limit = Math.min(
           limit,
-          entity.maxSpeed * (distance <= bodyClearance + 0.12 ? 0.18 : 0.48)
+          entity.maxSpeed * (distance <= bodyClearance + 0.12
+            ? yieldingVehicleClearingResponseLane ? 0.32 : 0.18
+            : yieldingVehicleClearingResponseLane ? 0.9 : 0.48)
         )
         continue
       }

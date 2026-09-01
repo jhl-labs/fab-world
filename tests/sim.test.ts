@@ -6,7 +6,7 @@ import { FabLayoutSchema, ScenarioSchema } from '../src/core/schema'
 import { updateTraffic } from '../src/sim/systems/trafficSystem'
 import { evacuationFlowSteering, groundBodyRadius, staticObstacleSteering, updateMovement } from '../src/sim/systems/movementSystem'
 import { SimWorld } from '../src/sim/world'
-import { gasValveGripTarget } from '../src/core/interactionGeometry'
+import { GAS_WORK_ZONE_RADIUS, gasValveGripTarget } from '../src/core/interactionGeometry'
 import { POSE_STRIDE, PoseFlags, PoseSlot } from '../src/core/protocol'
 import { circleIntersectsObstacle } from '../src/core/layout'
 
@@ -116,8 +116,13 @@ describe('SimWorld', () => {
       ['agv', 'igv'].includes(entity.kind) && entity.behavior === 'yield'
     )
     const humanoids = world.entities.filter((entity) => entity.kind === 'humanoid')
+    const gasValves = layout.emergency.safetyDevices.filter((device) => device.kind === 'gas-isolation-valve')
     expect(parked.every((vehicle) => humanoids.every((robot) =>
       Math.hypot(vehicle.goalX - robot.x, vehicle.goalZ - robot.z) >= 3 - 1e-9
+    ))).toBe(true)
+    expect(parked.every((vehicle) => gasValves.every((valve) =>
+      Math.hypot(vehicle.goalX - valve.position[0], vehicle.goalZ - valve.position[2]) >=
+        GAS_WORK_ZONE_RADIUS + groundBodyRadius(vehicle) + 1.8 - 1e-9
     ))).toBe(true)
     for (let left = 0; left < parked.length; left++) for (let right = left + 1; right < parked.length; right++) {
       expect(Math.hypot(
@@ -158,6 +163,21 @@ describe('SimWorld', () => {
     expect(task.status).toBe('navigating')
     expect(distance(route)).toBeLessThan(distance(direct) * 1.6)
   })
+  it('keeps the valve work area clear and completes gas isolation in the deployed showcase seed', () => {
+    const world = new SimWorld(layout, 20260729)
+    world.triggerEmergency('gasLeak')
+    for (let tick = 0; tick < 100 * 60; tick++) world.tick(1 / 60)
+    const task = world.humanoidTasks.find((candidate) => candidate.kind === 'gas_isolation')!
+    const parkedVehicles = world.entities.filter((entity) =>
+      (entity.kind === 'agv' || entity.kind === 'igv') &&
+      entity.behavior === 'yield'
+    )
+
+    expect(task.gasIsolationVerified).toBe(true)
+    expect(parkedVehicles.every((vehicle) =>
+      Math.hypot(vehicle.x - task.targetX, vehicle.z - task.targetZ) >= 2.8
+    )).toBe(true)
+  }, 60_000)
   it('keeps operator-dispatched gas robots behind evacuees in a shared egress lane', () => {
     const world = new SimWorld(layout, 971)
     world.triggerEmergency('gasLeak')
